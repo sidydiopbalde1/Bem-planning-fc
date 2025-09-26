@@ -1,0 +1,281 @@
+
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Modèle Utilisateur pour l'authentification
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String?
+  role      Role     @default(ADMIN)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  password   String    // 🔑 ajout du mot de passe
+  // Relations
+  programmes Programme[]
+  modules    Module[]
+
+  @@map("users")
+}
+
+enum Role {
+  ADMIN
+  COORDINATOR
+  TEACHER
+}
+
+// Modèle Programme (Maquette pédagogique)
+model Programme {
+  id          String      @id @default(cuid())
+  name        String
+  code        String      @unique
+  description String?
+  semestre    Semestre
+  niveau      String      // L1, L2, M1, M2, etc.
+  
+  // Dates
+  dateDebut   DateTime
+  dateFin     DateTime
+  
+  // Statut
+  status      StatusProgramme @default(PLANIFIE)
+  progression Int             @default(0) // Pourcentage
+  
+  // Volume horaire total
+  totalVHT    Int
+  
+  // Relations
+  modules     Module[]
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("programmes")
+}
+
+enum Semestre {
+  SEMESTRE_1
+  SEMESTRE_2
+  SEMESTRE_3
+  SEMESTRE_4
+  SEMESTRE_5
+  SEMESTRE_6
+}
+
+enum StatusProgramme {
+  PLANIFIE
+  EN_COURS
+  TERMINE
+  SUSPENDU
+  ANNULE
+}
+
+// Modèle Module/UE
+model Module {
+  id          String @id @default(cuid())
+  code        String @unique
+  name        String
+  description String?
+  
+  // Volume horaire
+  cm          Int    @default(0) // Cours Magistraux
+  td          Int    @default(0) // Travaux Dirigés
+  tp          Int    @default(0) // Travaux Pratiques
+  tpe         Int    @default(0) // Travail Personnel Étudiant
+  vht         Int              // Volume Horaire Total
+  
+  // Évaluation
+  coefficient Int    @default(1)
+  credits     Int    @default(1)
+  
+  // Statut et progression
+  status      StatusModule @default(PLANIFIE)
+  progression Int          @default(0)
+  
+  // Dates planifiées
+  dateDebut   DateTime?
+  dateFin     DateTime?
+  
+  // Relations
+  programmeId String
+  programme   Programme @relation(fields: [programmeId], references: [id], onDelete: Cascade)
+  
+  intervenantId String?
+  intervenant   Intervenant? @relation(fields: [intervenantId], references: [id])
+  
+  seances     Seance[]
+  
+  // Audit
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("modules")
+}
+
+enum StatusModule {
+  PLANIFIE
+  EN_COURS
+  TERMINE
+  REPORTE
+  ANNULE
+}
+
+// Modèle Intervenant/Enseignant
+model Intervenant {
+  id          String @id @default(cuid())
+  civilite    String // M., Mme, Dr, Pr
+  nom         String
+  prenom      String
+  email       String @unique
+  telephone   String?
+  
+  // Informations professionnelles
+  grade       String? // Professeur, Maître de conférences, etc.
+  specialite  String?
+  etablissement String?
+  
+  // Disponibilité
+  disponible  Boolean @default(true)
+  
+  // Relations
+  modules     Module[]
+  seances     Seance[]
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("intervenants")
+}
+
+// Modèle Séance (Planning détaillé)
+model Seance {
+  id          String @id @default(cuid())
+  
+  // Informations temporelles
+  dateSeance  DateTime
+  heureDebut  String   // Format HH:MM
+  heureFin    String   // Format HH:MM
+  duree       Int      // en minutes
+  
+  // Type de séance
+  typeSeance  TypeSeance
+  
+  // Lieu
+  salle       String?
+  batiment    String?
+  
+  // Statut
+  status      StatusSeance @default(PLANIFIE)
+  
+  // Relations
+  moduleId    String
+  module      Module @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  
+  intervenantId String
+  intervenant   Intervenant @relation(fields: [intervenantId], references: [id])
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("seances")
+}
+
+enum TypeSeance {
+  CM  // Cours Magistral
+  TD  // Travaux Dirigés
+  TP  // Travaux Pratiques
+  EXAMEN
+  RATTRAPAGE
+}
+
+enum StatusSeance {
+  PLANIFIE
+  CONFIRME
+  EN_COURS
+  TERMINE
+  REPORTE
+  ANNULE
+}
+
+// Modèle Salle
+model Salle {
+  id          String @id @default(cuid())
+  nom         String @unique
+  batiment    String
+  capacite    Int
+  equipements String? // JSON ou texte libre
+  disponible  Boolean @default(true)
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("salles")
+}
+
+// Modèle Conflit (pour détecter les chevauchements)
+model Conflit {
+  id          String      @id @default(cuid())
+  type        TypeConflit
+  description String
+  
+  // Séances en conflit
+  seanceId1   String
+  seanceId2   String?
+  
+  // Ressources en conflit
+  ressourceType String  // INTERVENANT, SALLE
+  ressourceId   String
+  
+  // Résolution
+  resolu      Boolean @default(false)
+  resolution  String?
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("conflits")
+}
+
+enum TypeConflit {
+  INTERVENANT_DOUBLE_BOOKING
+  SALLE_DOUBLE_BOOKING
+  CHEVAUCHEMENT_HORAIRE
+  CONTRAINTE_CALENDAIRE
+}
+
+// Modèle Période Académique
+model PeriodeAcademique {
+  id          String   @id @default(cuid())
+  nom         String   // "Année 2024-2025"
+  annee       String   // "2024-2025"
+  
+  // Dates importantes
+  debutS1     DateTime // Début semestre 1
+  finS1       DateTime // Fin semestre 1
+  debutS2     DateTime // Début semestre 2
+  finS2       DateTime // Fin semestre 2
+  
+  // Vacances et pauses
+  vacancesNoel DateTime
+  finVacancesNoel DateTime
+  vacancesPaques DateTime?
+  finVacancesPaques DateTime?
+  
+  active      Boolean @default(false)
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("periodes_academiques")
+}

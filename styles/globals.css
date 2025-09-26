@@ -1,0 +1,232 @@
+@import "tailwindcss";
+
+/* Configuration personnalisée / thèmes etc. */
+@theme {
+  --color-primary: #F9113A;
+  --color-primary-dark: #d10e32;
+  --color-primary-light: #ff4d6b;
+}
+
+/* Ton style global / body etc. */
+@layer base {
+  body {
+    font-family: 'Inter', sans-serif;
+  }
+}
+
+/* Composants personnalisés */
+@layer components {
+  .btn-primary {
+    @apply bg-primary hover:bg-primary-dark text-white font-medium py-2 px-4 rounded-lg transition-colors;
+  }
+
+  .card {
+    @apply bg-white rounded-lg shadow-md border border-gray-200;
+  }
+
+  .input-field {
+    @apply w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent;
+  }
+}
+
+/* Utilities + animations, etc. */
+@layer utilities {
+  .text-primary {
+    color: var(--primary);
+  }
+
+  .bg-primary {
+    background-color: var(--primary);
+  }
+
+  .border-primary {
+    border-color: var(--primary);
+  }
+
+  .ring-primary {
+    --tw-ring-color: var(--primary);
+  }
+
+  .slide-in {
+    animation: slideIn 0.3s ease-out;
+  }
+
+  .fade-in {
+    animation: fadeIn 0.5s ease-out;
+  }
+}
+
+/* Animations personnalisées */
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* Scrollbar personnalisée, etc. */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Mode sombre (optionnel) */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg-primary: #1f2937;
+    --text-primary: #f9fafb;
+  }
+}
+
+/* Autres utilitaires ou overrides selon besoin */
+/* Ajoutez ceci à votre styles/globals.css */
+
+/* Assurer que html, body et #__next prennent toute la hauteur */
+html, body, #__next {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+/* Empêcher le scroll horizontal */
+body {
+  overflow-x: hidden;
+}
+
+/* Styles pour la sidebar */
+.sidebar-container {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Smooth scrollbar pour la navigation */
+.sidebar-nav::-webkit-scrollbar {
+  width: 4px;
+}
+
+.sidebar-nav::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.sidebar-nav::-webkit-scrollbar-thumb {
+  background: rgba(156, 163, 175, 0.3);
+  border-radius: 2px;
+}
+
+.sidebar-nav::-webkit-scrollbar-thumb:hover {
+  background: rgba(156, 163, 175, 0.5);
+}
+
+/* Animation pour l'indicateur actif */
+@keyframes slideIn {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+.nav-item-active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 70%;
+  background: #2563eb;
+  border-radius: 0 2px 2px 0;
+  animation: slideIn 0.2s ease-out;
+}
+
+/* Responsive breakpoints */
+@media (max-width: 1024px) {
+  .sidebar-container {
+    position: fixed;
+    z-index: 50;
+  }
+}
+
+/* Focus states pour l'accessibilité */
+.nav-item:focus {
+  outline: 2px solid #3b82f6;
+  outline-offset: -2px;
+}
+
+/* Hover effects */
+.nav-item {
+  position: relative;
+  transition: all 0.2s ease-in-out;
+}
+
+.nav-item:not(.active):hover {
+  transform: translateX(2px);
+}
+
+/* Mobile optimizations */
+@media (max-width: 768px) {
+  .main-content {
+    padding: 1rem;
+  }
+  
+  .sidebar-container {
+    width: 280px;
+  }
+}
+
+/* Prevent content shifting */
+.layout-container {
+  display: flex;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.main-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.content-area {
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Smooth transitions pour mobile */
+@media (max-width: 1024px) {
+  .sidebar-container {
+    transition: transform 0.3s ease-in-out;
+  }
+  
+  .sidebar-container.sidebar-closed {
+    transform: translateX(-100%);
+  }
+  
+  .sidebar-container.sidebar-open {
+    transform: translateX(0);
+  }
+}
