@@ -48,7 +48,7 @@ const StatCard = ({
             {Icon && (
               <div className="flex-shrink-0 mr-3">
                 <div className="w-10 h-10 bg-blue-50 rounded-lg flex items-center justify-center">
-                  <Icon className="h-5 w-5 text-blue-600" />
+                  <Icon className="h-5 w-5 text-black-600" />
                 </div>
               </div>
             )}

@@ -3,16 +3,17 @@ import { useSession, signOut } from 'next-auth/react';
 import { useRouter } from 'next/router';
 import Link from 'next/link';
 import Head from 'next/head';
-import { 
-  Calendar, 
-  BookOpen, 
-  Users, 
-  Settings, 
+import {
+  Calendar,
+  BookOpen,
+  Users,
+  Settings,
   LogOut,
   Menu,
   X,
   Home,
-  ChevronDown
+  ChevronDown,
+  BarChart3
 } from 'lucide-react';
 
 export default function Layout({ children, title = "Planning FC" }) {
@@ -22,11 +23,12 @@ export default function Layout({ children, title = "Planning FC" }) {
   const [userMenuOpen, setUserMenuOpen] = useState(false);
 
   const navigation = [
-    { name: 'Tableau de Bord', href: '/dashboard/dashboard', icon: Home },
+    { name: 'Tableau de Bord', href: '/dashboard', icon: Home },
     { name: 'Programmes', href: '/programmes', icon: BookOpen },
     { name: 'Calendrier', href: '/calendar', icon: Calendar },
     { name: 'Intervenants', href: '/intervenants', icon: Users },
-    { name: 'Paramètres', href: '/settings', icon: Settings },
+    { name: 'Statistiques', href: '/statistics', icon: BarChart3 },
+    { name: 'Parametres', href: '/settings', icon: Settings },
   ];
 
   const isActive = (href) => {
@@ -61,12 +63,12 @@ export default function Layout({ children, title = "Planning FC" }) {
           sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
         }`}>
           {/* Logo/Header */}
-          <div className="flex items-center justify-between h-16 px-6 bg-gradient-to-r from-blue-600 to-blue-700 flex-shrink-0">
-            <Link href="/dashboard/dashboard" className="flex items-center space-x-2">
+          <div className="flex items-center justify-between h-16 px-6 bg-gradient-to-r from-red-400 to-red-700 flex-shrink-0">
+            <Link href="/dashboard" className="flex items-center space-x-2">
               <div className="w-8 h-8 bg-white bg-opacity-20 rounded-lg flex items-center justify-center">
-                <BookOpen className="h-5 w-5 text-white" />
+                <BookOpen className="h-5 w-5 text-black" />
               </div>
-              <span className="text-white text-xl font-bold">Planning FC</span>
+              <span className="text-black text-xl font-bold">BEM Planning FC</span>
             </Link>
             <button 
               onClick={() => setSidebarOpen(false)}
@@ -76,7 +78,7 @@ export default function Layout({ children, title = "Planning FC" }) {
             </button>
           </div>
 
-          {/* Navigation - takes up available space */}
+          {/* Navigation*/}
           <nav className="flex-1 px-4 py-6 overflow-y-auto">
             <div className="space-y-1">
               {navigation.map((item) => {
@@ -88,17 +90,17 @@ export default function Layout({ children, title = "Planning FC" }) {
                     href={item.href}
                     className={`group flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-all duration-200 ${
                       active
-                        ? 'bg-blue-50 text-blue-700 shadow-sm'
+                        ? 'bg-blue-50 text-black-700 shadow-sm'
                         : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
                     }`}
                     onClick={() => setSidebarOpen(false)}
                   >
                     <Icon className={`mr-3 h-5 w-5 transition-colors ${
-                      active ? 'text-blue-600' : 'text-gray-400 group-hover:text-gray-600'
+                      active ? 'text-black' : 'text-gray-400 group-hover:text-gray-600'
                     }`} />
                     {item.name}
                     {active && (
-                      <div className="ml-auto w-2 h-2 bg-blue-600 rounded-full"></div>
+                      <div className="ml-auto w-2 h-2 bg-black rounded-full"></div>
                     )}
                   </Link>
                 );
@@ -116,7 +118,7 @@ export default function Layout({ children, title = "Planning FC" }) {
                     className="flex items-center w-full p-3 rounded-lg hover:bg-gray-50 transition-colors"
                   >
                     <div className="flex-shrink-0">
-                      <div className="w-10 h-10 bg-gradient-to-r from-blue-500 to-blue-600 rounded-full flex items-center justify-center shadow-sm">
+                      <div className="w-10 h-10 bg-gradient-to-r from-red-500 to-red-600 rounded-full flex items-center justify-center shadow-sm">
                         <span className="text-white text-sm font-semibold">
                           {session.user.name?.charAt(0).toUpperCase()}
                         </span>

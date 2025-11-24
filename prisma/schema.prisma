@@ -1,4 +1,7 @@
-
+// ============================================================================
+// SCHEMA PRISMA - BEM Planning FC
+// Base sur le MCD/MLD documente dans docs/memoire/02-mcd-mld.md
+// ============================================================================
 
 generator client {
   provider = "prisma-client-js"
@@ -9,57 +12,14 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// Modèle Utilisateur pour l'authentification
-model User {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  name      String?
-  role      Role     @default(ADMIN)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  password   String    // 🔑 ajout du mot de passe
-  // Relations
-  programmes Programme[]
-  modules    Module[]
-
-  @@map("users")
-}
+// ============================================================================
+// ENUMERATIONS
+// ============================================================================
 
 enum Role {
   ADMIN
   COORDINATOR
   TEACHER
-}
-
-// Modèle Programme (Maquette pédagogique)
-model Programme {
-  id          String      @id @default(cuid())
-  name        String
-  code        String      @unique
-  description String?
-  semestre    Semestre
-  niveau      String      // L1, L2, M1, M2, etc.
-  
-  // Dates
-  dateDebut   DateTime
-  dateFin     DateTime
-  
-  // Statut
-  status      StatusProgramme @default(PLANIFIE)
-  progression Int             @default(0) // Pourcentage
-  
-  // Volume horaire total
-  totalVHT    Int
-  
-  // Relations
-  modules     Module[]
-  userId      String
-  user        User     @relation(fields: [userId], references: [id])
-  
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  @@map("programmes")
 }
 
 enum Semestre {
@@ -79,50 +39,6 @@ enum StatusProgramme {
   ANNULE
 }
 
-// Modèle Module/UE
-model Module {
-  id          String @id @default(cuid())
-  code        String @unique
-  name        String
-  description String?
-  
-  // Volume horaire
-  cm          Int    @default(0) // Cours Magistraux
-  td          Int    @default(0) // Travaux Dirigés
-  tp          Int    @default(0) // Travaux Pratiques
-  tpe         Int    @default(0) // Travail Personnel Étudiant
-  vht         Int              // Volume Horaire Total
-  
-  // Évaluation
-  coefficient Int    @default(1)
-  credits     Int    @default(1)
-  
-  // Statut et progression
-  status      StatusModule @default(PLANIFIE)
-  progression Int          @default(0)
-  
-  // Dates planifiées
-  dateDebut   DateTime?
-  dateFin     DateTime?
-  
-  // Relations
-  programmeId String
-  programme   Programme @relation(fields: [programmeId], references: [id], onDelete: Cascade)
-  
-  intervenantId String?
-  intervenant   Intervenant? @relation(fields: [intervenantId], references: [id])
-  
-  seances     Seance[]
-  
-  // Audit
-  userId      String
-  user        User     @relation(fields: [userId], references: [id])
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  @@map("modules")
-}
-
 enum StatusModule {
   PLANIFIE
   EN_COURS
@@ -131,70 +47,10 @@ enum StatusModule {
   ANNULE
 }
 
-// Modèle Intervenant/Enseignant
-model Intervenant {
-  id          String @id @default(cuid())
-  civilite    String // M., Mme, Dr, Pr
-  nom         String
-  prenom      String
-  email       String @unique
-  telephone   String?
-  
-  // Informations professionnelles
-  grade       String? // Professeur, Maître de conférences, etc.
-  specialite  String?
-  etablissement String?
-  
-  // Disponibilité
-  disponible  Boolean @default(true)
-  
-  // Relations
-  modules     Module[]
-  seances     Seance[]
-  
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  @@map("intervenants")
-}
-
-// Modèle Séance (Planning détaillé)
-model Seance {
-  id          String @id @default(cuid())
-  
-  // Informations temporelles
-  dateSeance  DateTime
-  heureDebut  String   // Format HH:MM
-  heureFin    String   // Format HH:MM
-  duree       Int      // en minutes
-  
-  // Type de séance
-  typeSeance  TypeSeance
-  
-  // Lieu
-  salle       String?
-  batiment    String?
-  
-  // Statut
-  status      StatusSeance @default(PLANIFIE)
-  
-  // Relations
-  moduleId    String
-  module      Module @relation(fields: [moduleId], references: [id], onDelete: Cascade)
-  
-  intervenantId String
-  intervenant   Intervenant @relation(fields: [intervenantId], references: [id])
-  
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  @@map("seances")
-}
-
 enum TypeSeance {
-  CM  // Cours Magistral
-  TD  // Travaux Dirigés
-  TP  // Travaux Pratiques
+  CM           // Cours Magistral
+  TD           // Travaux Diriges
+  TP           // Travaux Pratiques
   EXAMEN
   RATTRAPAGE
 }
@@ -208,74 +64,421 @@ enum StatusSeance {
   ANNULE
 }
 
-// Modèle Salle
-model Salle {
-  id          String @id @default(cuid())
-  nom         String @unique
-  batiment    String
-  capacite    Int
-  equipements String? // JSON ou texte libre
-  disponible  Boolean @default(true)
-  
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  @@map("salles")
-}
-
-// Modèle Conflit (pour détecter les chevauchements)
-model Conflit {
-  id          String      @id @default(cuid())
-  type        TypeConflit
-  description String
-  
-  // Séances en conflit
-  seanceId1   String
-  seanceId2   String?
-  
-  // Ressources en conflit
-  ressourceType String  // INTERVENANT, SALLE
-  ressourceId   String
-  
-  // Résolution
-  resolu      Boolean @default(false)
-  resolution  String?
-  
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  @@map("conflits")
-}
-
 enum TypeConflit {
   INTERVENANT_DOUBLE_BOOKING
   SALLE_DOUBLE_BOOKING
   CHEVAUCHEMENT_HORAIRE
   CONTRAINTE_CALENDAIRE
+  SURCHARGE_INTERVENANT
+  JOUR_NON_OUVRABLE
 }
 
-// Modèle Période Académique
+enum SeveriteConflit {
+  BASSE        // Avertissement
+  MOYENNE      // A corriger
+  HAUTE        // Bloquant
+  CRITIQUE     // Urgent
+}
+
+enum TypeDisponibilite {
+  DISPONIBLE
+  INDISPONIBLE
+  PREFERENCE
+}
+
+enum ActionType {
+  CREATION
+  MODIFICATION
+  SUPPRESSION
+  CONNEXION
+  DECONNEXION
+  PLANIFICATION_AUTO
+  RESOLUTION_CONFLIT
+  EXPORT_DONNEES
+}
+
+// ============================================================================
+// MODELES (TABLES)
+// ============================================================================
+
+// ----------------------------------------------------------------------------
+// Table: users
+// Description: Utilisateurs du systeme avec authentification
+// ----------------------------------------------------------------------------
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String?
+  password  String   // Hash bcrypt
+  role      Role     @default(ADMIN)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations (1:N)
+  programmes Programme[]
+  modules    Module[]
+
+  @@map("users")
+  @@index([email])
+}
+
+// ----------------------------------------------------------------------------
+// Table: programmes
+// Description: Maquettes pedagogiques de formation
+// Contraintes: date_fin > date_debut, progression entre 0 et 100
+// ----------------------------------------------------------------------------
+model Programme {
+  id          String          @id @default(cuid())
+  code        String          @unique
+  name        String
+  description String?
+  semestre    Semestre
+  niveau      String          // L1, L2, L3, M1, M2, Doctorat, etc.
+
+  // Dates
+  dateDebut   DateTime
+  dateFin     DateTime
+
+  // Statut et progression
+  status      StatusProgramme @default(PLANIFIE)
+  progression Int             @default(0) // Pourcentage 0-100
+
+  // Volume horaire
+  totalVHT    Int             // Volume Horaire Total en heures
+
+  // Relation proprietaire (N:1)
+  userId      String
+  user        User            @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  // Relations enfants (1:N)
+  modules     Module[]
+
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  @@map("programmes")
+  @@index([userId])
+  @@index([status])
+  @@index([code])
+}
+
+// ----------------------------------------------------------------------------
+// Table: intervenants
+// Description: Enseignants et formateurs
+// Contraintes: heures max par semaine et par jour
+// ----------------------------------------------------------------------------
+model Intervenant {
+  id          String   @id @default(cuid())
+  civilite    String   // M., Mme, Dr, Pr
+  nom         String
+  prenom      String
+  email       String   @unique
+  telephone   String?
+
+  // Informations professionnelles
+  grade          String?  // Professeur, Maitre de conferences, ATER, etc.
+  specialite     String?
+  etablissement  String?
+
+  // Disponibilite globale
+  disponible  Boolean  @default(true)
+
+  // Contraintes de charge horaire (pour algorithme de planification)
+  heuresMaxSemaine    Int     @default(20)  // Heures max par semaine
+  heuresMaxJour       Int     @default(6)   // Heures max par jour
+  joursPreferences    String? // JSON: ["LUNDI", "MARDI"]
+  creneauxPreferences String? // JSON: ["MATIN", "APRES_MIDI"]
+
+  // Relations (1:N)
+  modules        Module[]
+  seances        Seance[]
+  disponibilites DisponibiliteIntervenant[]
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("intervenants")
+  @@index([email])
+  @@index([disponible])
+}
+
+// ----------------------------------------------------------------------------
+// Table: disponibilites_intervenants
+// Description: Creneaux de disponibilite specifiques des intervenants
+// ----------------------------------------------------------------------------
+model DisponibiliteIntervenant {
+  id            String             @id @default(cuid())
+
+  // Jour de la semaine (0=Dimanche, 1=Lundi, ..., 6=Samedi)
+  jourSemaine   Int                // 0-6
+
+  // Creneaux horaires
+  heureDebut    String             // Format HH:MM
+  heureFin      String             // Format HH:MM
+
+  // Type de disponibilite
+  type          TypeDisponibilite  @default(DISPONIBLE)
+
+  // Recurrence
+  dateDebut     DateTime?          // Si ponctuel
+  dateFin       DateTime?          // Si ponctuel
+  recurrent     Boolean            @default(true) // Repetition hebdomadaire
+
+  // Relation (N:1)
+  intervenantId String
+  intervenant   Intervenant        @relation(fields: [intervenantId], references: [id], onDelete: Cascade)
+
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+
+  @@map("disponibilites_intervenants")
+  @@index([intervenantId])
+  @@index([jourSemaine])
+}
+
+// ----------------------------------------------------------------------------
+// Table: modules
+// Description: Unites d'enseignement (UE)
+// Contrainte: vht = cm + td + tp
+// ----------------------------------------------------------------------------
+model Module {
+  id          String       @id @default(cuid())
+  code        String       @unique
+  name        String
+  description String?
+
+  // Volume horaire
+  cm          Int          @default(0) // Cours Magistraux
+  td          Int          @default(0) // Travaux Diriges
+  tp          Int          @default(0) // Travaux Pratiques
+  tpe         Int          @default(0) // Travail Personnel Etudiant
+  vht         Int                      // Volume Horaire Total (CM+TD+TP)
+
+  // Evaluation
+  coefficient Int          @default(1)
+  credits     Int          @default(1) // Credits ECTS
+
+  // Statut et progression
+  status      StatusModule @default(PLANIFIE)
+  progression Int          @default(0) // Pourcentage 0-100
+
+  // Dates planifiees
+  dateDebut   DateTime?
+  dateFin     DateTime?
+
+  // Relation programme (N:1)
+  programmeId String
+  programme   Programme    @relation(fields: [programmeId], references: [id], onDelete: Cascade)
+
+  // Relation intervenant (N:1) - Optionnel
+  intervenantId String?
+  intervenant   Intervenant? @relation(fields: [intervenantId], references: [id], onDelete: SetNull)
+
+  // Relation createur (N:1)
+  userId      String
+  user        User         @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  // Relations enfants (1:N)
+  seances     Seance[]
+
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  @@map("modules")
+  @@index([programmeId])
+  @@index([intervenantId])
+  @@index([userId])
+  @@index([code])
+}
+
+// ----------------------------------------------------------------------------
+// Table: salles
+// Description: Salles de cours disponibles
+// ----------------------------------------------------------------------------
+model Salle {
+  id          String   @id @default(cuid())
+  nom         String   @unique
+  batiment    String
+  capacite    Int      // Nombre de places
+  equipements String?  // JSON ou texte libre
+  disponible  Boolean  @default(true)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("salles")
+  @@index([nom])
+  @@index([disponible])
+}
+
+// ----------------------------------------------------------------------------
+// Table: seances
+// Description: Occurrences planifiees des enseignements
+// Contrainte: heure_fin > heure_debut
+// ----------------------------------------------------------------------------
+model Seance {
+  id          String       @id @default(cuid())
+
+  // Informations temporelles
+  dateSeance  DateTime
+  heureDebut  String       // Format HH:MM
+  heureFin    String       // Format HH:MM
+  duree       Int          // En minutes
+
+  // Type de seance
+  typeSeance  TypeSeance
+
+  // Lieu (optionnel - salle non toujours definie)
+  salle       String?
+  batiment    String?
+
+  // Statut
+  status      StatusSeance @default(PLANIFIE)
+
+  // Notes et objectifs pedagogiques
+  notes       String?
+  objectifs   String?
+
+  // Relation module (N:1)
+  moduleId    String
+  module      Module       @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+
+  // Relation intervenant (N:1)
+  intervenantId String
+  intervenant   Intervenant @relation(fields: [intervenantId], references: [id], onDelete: Restrict)
+
+  // Relations conflits (1:N)
+  conflitsAsSeance1 Conflit[] @relation("ConflitSeance1")
+  conflitsAsSeance2 Conflit[] @relation("ConflitSeance2")
+
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  @@map("seances")
+  @@index([dateSeance])
+  @@index([intervenantId, dateSeance])
+  @@index([salle, dateSeance])
+  @@index([moduleId])
+  @@index([status])
+}
+
+// ----------------------------------------------------------------------------
+// Table: conflits
+// Description: Conflits de planification detectes
+// ----------------------------------------------------------------------------
+model Conflit {
+  id          String          @id @default(cuid())
+  type        TypeConflit
+  description String
+  severite    SeveriteConflit @default(HAUTE)
+
+  // Seances en conflit (avec relations)
+  seanceId1   String
+  seance1     Seance          @relation("ConflitSeance1", fields: [seanceId1], references: [id], onDelete: Cascade)
+
+  seanceId2   String?
+  seance2     Seance?         @relation("ConflitSeance2", fields: [seanceId2], references: [id], onDelete: Cascade)
+
+  // Ressources en conflit
+  ressourceType String         // INTERVENANT, SALLE
+  ressourceId   String         // ID de la ressource
+
+  // Resolution
+  resolu      Boolean         @default(false)
+  resolution  String?
+  resoluPar   String?         // ID utilisateur qui a resolu
+  resoluLe    DateTime?       // Date de resolution
+
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  @@map("conflits")
+  @@index([seanceId1])
+  @@index([seanceId2])
+  @@index([resolu])
+  @@index([type])
+  @@index([severite])
+}
+
+// ----------------------------------------------------------------------------
+// Table: periodes_academiques
+// Description: Annees universitaires avec dates importantes
+// ----------------------------------------------------------------------------
 model PeriodeAcademique {
   id          String   @id @default(cuid())
-  nom         String   // "Année 2024-2025"
+  nom         String   // "Annee 2024-2025"
   annee       String   // "2024-2025"
-  
+
   // Dates importantes
-  debutS1     DateTime // Début semestre 1
+  debutS1     DateTime // Debut semestre 1
   finS1       DateTime // Fin semestre 1
-  debutS2     DateTime // Début semestre 2
+  debutS2     DateTime // Debut semestre 2
   finS2       DateTime // Fin semestre 2
-  
+
   // Vacances et pauses
-  vacancesNoel DateTime
-  finVacancesNoel DateTime
-  vacancesPaques DateTime?
-  finVacancesPaques DateTime?
-  
-  active      Boolean @default(false)
-  
+  vacancesNoel       DateTime
+  finVacancesNoel    DateTime
+  vacancesPaques     DateTime?
+  finVacancesPaques  DateTime?
+
+  active      Boolean  @default(false)
+
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   @@map("periodes_academiques")
+  @@index([active])
+  @@index([annee])
 }
+
+// ----------------------------------------------------------------------------
+// Table: journal_activites
+// Description: Journal d'audit pour tracabilite des actions
+// ----------------------------------------------------------------------------
+model JournalActivite {
+  id          String     @id @default(cuid())
+
+  // Action effectuee
+  action      ActionType
+  entite      String     // Programme, Module, Seance, etc.
+  entiteId    String     // ID de l'entite concernee
+  description String
+
+  // Donnees avant/apres (pour tracabilite)
+  ancienneValeur String?  // JSON
+  nouvelleValeur String?  // JSON
+
+  // Utilisateur
+  userId      String
+  userName    String?
+
+  // Metadonnees
+  ipAddress   String?
+  userAgent   String?
+
+  createdAt   DateTime   @default(now())
+
+  @@map("journal_activites")
+  @@index([userId])
+  @@index([entite, entiteId])
+  @@index([createdAt])
+  @@index([action])
+}
+
+// ============================================================================
+// NOTES ET CONTRAINTES
+// ============================================================================
+
+// Contraintes implementees au niveau application (pas Prisma):
+// - Programme: date_fin > date_debut
+// - Programme: progression entre 0 et 100
+// - Module: vht = cm + td + tp
+// - Module: progression entre 0 et 100
+// - Seance: heure_fin > heure_debut
+// - DisponibiliteIntervenant: heure_fin > heure_debut
+// - Intervenant: heures_max_semaine >= 0, heures_max_jour >= 0
+
+// Relations avec onDelete:
+// - CASCADE: Suppression en cascade (modules -> seances, programme -> modules)
+// - RESTRICT: Empeche la suppression si des dependances existent
+// - SET NULL: Met a NULL si la reference est supprimee (intervenant -> module)

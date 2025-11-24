@@ -1,0 +1,28 @@
+# name: Deploy to Render
+
+# on:
+#   push:
+#     branches:
+#       - dev-sidy-diop
+
+# jobs:
+#   build:
+#     runs-on: ubuntu-latest
+#     steps:
+#       - uses: actions/checkout@v3
+
+#       - name: Log in to Docker Hub
+#         uses: docker/login-action@v2
+#         with:
+#           username: ${{ secrets.DOCKER_USERNAME }}
+#           password: ${{ secrets.DOCKER_PASSWORD }}
+
+#       - name: Build Docker image
+#         run: docker build --build-arg "MONGODB_URI=${{ secrets.MONGODB_URI }}" -t "${{ secrets.DOCKER_USERNAME }}/mcn-museum:latest" .
+
+#       - name: Push Docker image
+#         run: docker push "${{ secrets.DOCKER_USERNAME }}/bem-planning-fc:latest"
+
+#       - name: Deploy to Render
+#         run: |
+#           curl -X POST ${{ secrets.RENDER_DEPLOY_HOOK }}

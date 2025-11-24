@@ -48,9 +48,9 @@ export default async function handler(req, res) {
           }
         }
       });
-
+        console.log(programme);
       if (!programme) {
-        return res.status(404).json({ error: 'Programme non trouvé' });
+        return res.status(404).json({ error: 'Programme non trouvé bbbbbbbb' });
       }
 
       res.status(200).json({ programme });

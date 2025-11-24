@@ -47,7 +47,7 @@ export default function Dashboard({ initialProgrammes, initialStats }) {
       if (search) params.append('search', search);
       if (status !== 'all') params.append('status', status);
 
-      const response = await fetch(`/api/programmes/programmes?${params}`);
+      const response = await fetch(`/api/programmes?${params}`);
       const data = await response.json();
 
       if (response.ok) {
@@ -106,7 +106,7 @@ export default function Dashboard({ initialProgrammes, initialStats }) {
           <div className="mt-4 lg:mt-0">
           <button
               onClick={() => setShowCreateModal(true)}
-              className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              className="flex items-center px-4 py-2 bg-red-600 text-black rounded-lg hover:bg-red-700 transition-colors"
             >
               <Plus className="h-4 w-4 mr-2" />
               Nouveau Programme
@@ -154,7 +154,7 @@ export default function Dashboard({ initialProgrammes, initialStats }) {
               onClick={() => setShowCreateModal(true)}
               className="flex items-center p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors duration-200 group text-left"
             >
-              <Plus className="h-8 w-8 text-blue-600 mr-3 group-hover:text-blue-700" />
+              <Plus className="h-8 w-8 text-red-600 mr-3 group-hover:text-red-700" />
               <div>
                 <p className="font-medium text-gray-900">Créer un Programme</p>
                 <p className="text-sm text-gray-600">Nouvelle maquette pédagogique</p>
@@ -162,7 +162,7 @@ export default function Dashboard({ initialProgrammes, initialStats }) {
             </button>
             
             <Link href="/calendar" className="flex items-center p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors duration-200 group">
-              <Calendar className="h-8 w-8 text-blue-600 mr-3 group-hover:text-blue-700" />
+              <Calendar className="h-8 w-8 text-red-600 mr-3 group-hover:text-red-700" />
               <div>
                 <p className="font-medium text-gray-900">Voir le Calendrier</p>
                 <p className="text-sm text-gray-600">Planning global</p>
@@ -170,7 +170,7 @@ export default function Dashboard({ initialProgrammes, initialStats }) {
             </Link>
             
             <Link href="/intervenants" className="flex items-center p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors duration-200 group">
-              <Users className="h-8 w-8 text-blue-600 mr-3 group-hover:text-blue-700" />
+              <Users className="h-8 w-8 text-red-600 mr-3 group-hover:text-red-700" />
               <div>
                 <p className="font-medium text-gray-900">Gérer Intervenants</p>
                 <p className="text-sm text-gray-600">Disponibilités et planning</p>

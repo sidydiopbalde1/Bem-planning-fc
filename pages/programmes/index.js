@@ -56,7 +56,7 @@ export default function ProgrammesPage() {
 
   const fetchProgrammes = async () => {
     try {
-      const response = await fetch('/api/programmes/programmes');
+      const response = await fetch('/api/programmes');
       const data = await response.json();
       
       if (response.ok) {
@@ -209,7 +209,7 @@ export default function ProgrammesPage() {
           </div>
           <button
             onClick={() => setShowCreateModal(true)}
-            className="mt-4 lg:mt-0 flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            className="mt-4 lg:mt-0 flex items-center px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
           >
             <Plus className="h-4 w-4 mr-2" />
             Nouveau Programme
