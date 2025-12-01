@@ -13,7 +13,10 @@ import {
   X,
   Home,
   ChevronDown,
-  BarChart3
+  BarChart3,
+  ClipboardCheck,
+  GraduationCap,
+  Award
 } from 'lucide-react';
 
 export default function Layout({ children, title = "Planning FC" }) {
@@ -21,6 +24,7 @@ export default function Layout({ children, title = "Planning FC" }) {
   const router = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [tableauxBordOpen, setTableauxBordOpen] = useState(true);
 
   const navigation = [
     { name: 'Tableau de Bord', href: '/dashboard', icon: Home },
@@ -29,6 +33,27 @@ export default function Layout({ children, title = "Planning FC" }) {
     { name: 'Intervenants', href: '/intervenants', icon: Users },
     { name: 'Statistiques', href: '/statistics', icon: BarChart3 },
     { name: 'Parametres', href: '/settings', icon: Settings },
+  ];
+
+  const tableauxBordNav = [
+    {
+      name: 'Échéances Académiques',
+      href: '/tableaux-bord/echeances-academiques',
+      icon: ClipboardCheck,
+      description: 'Suivi des activités et indicateurs'
+    },
+    {
+      name: 'Maquette Pédagogique',
+      href: '/tableaux-bord/maquette-pedagogique',
+      icon: GraduationCap,
+      description: 'Modules et résultats étudiants'
+    },
+    {
+      name: 'Tableau de Bord Qualité',
+      href: '/tableaux-bord/qualite',
+      icon: Award,
+      description: 'Indicateurs de qualité'
+    }
   ];
 
   const isActive = (href) => {
@@ -105,6 +130,53 @@ export default function Layout({ children, title = "Planning FC" }) {
                   </Link>
                 );
               })}
+            </div>
+
+            {/* Tableaux de Bord Section */}
+            <div className="mt-6 pt-6 border-t border-gray-200">
+              <button
+                onClick={() => setTableauxBordOpen(!tableauxBordOpen)}
+                className="flex items-center justify-between w-full px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider hover:text-gray-700 transition-colors"
+              >
+                <span>Tableaux de Bord</span>
+                <ChevronDown className={`h-4 w-4 transition-transform ${
+                  tableauxBordOpen ? 'rotate-180' : ''
+                }`} />
+              </button>
+
+              {tableauxBordOpen && (
+                <div className="mt-2 space-y-1">
+                  {tableauxBordNav.map((item) => {
+                    const Icon = item.icon;
+                    const active = isActive(item.href);
+                    return (
+                      <Link
+                        key={item.name}
+                        href={item.href}
+                        className={`group flex items-start px-3 py-2.5 text-sm font-medium rounded-lg transition-all duration-200 ${
+                          active
+                            ? 'bg-gradient-to-r from-red-50 to-red-100 text-red-700 shadow-sm'
+                            : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
+                        }`}
+                        onClick={() => setSidebarOpen(false)}
+                      >
+                        <Icon className={`mr-3 h-5 w-5 flex-shrink-0 transition-colors ${
+                          active ? 'text-red-600' : 'text-gray-400 group-hover:text-gray-600'
+                        }`} />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between">
+                            <span className="truncate">{item.name}</span>
+                            {active && (
+                              <div className="ml-2 w-2 h-2 bg-red-600 rounded-full flex-shrink-0"></div>
+                            )}
+                          </div>
+                          <p className="text-xs text-gray-500 mt-0.5">{item.description}</p>
+                        </div>
+                      </Link>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </nav>
 
