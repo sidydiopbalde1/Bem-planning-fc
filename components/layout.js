@@ -16,7 +16,8 @@ import {
   BarChart3,
   ClipboardCheck,
   GraduationCap,
-  Award
+  Award,
+  FileText
 } from 'lucide-react';
 
 export default function Layout({ children, title = "Planning FC" }) {
@@ -47,6 +48,12 @@ export default function Layout({ children, title = "Planning FC" }) {
       href: '/tableaux-bord/maquette-pedagogique',
       icon: GraduationCap,
       description: 'Modules et résultats étudiants'
+    },
+    {
+      name: 'Résultats Étudiants',
+      href: '/resultats-etudiants',
+      icon: FileText,
+      description: 'Consultation des résultats académiques'
     },
     {
       name: 'Tableau de Bord Qualité',

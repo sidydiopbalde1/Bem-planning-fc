@@ -112,7 +112,7 @@
   - Visualisation du pourcentage d'avancement (0-100%)
   - Monitoring du respect des échéances
   - Alertes sur les retards
-
+ 
 ##### Gestion des modules
 - **Création et paramétrage des modules**
   - Définition du code, nom et description
