@@ -42,6 +42,64 @@
 
 ---
 
+## 🎉 Nouvelles Fonctionnalités (Décembre 2025)
+
+### ✅ Gestion Complète des Utilisateurs (Administrateur)
+
+L'interface d'administration a été entièrement développée avec les fonctionnalités suivantes :
+
+- **Interface Web Moderne** - Page `/admin/users` avec design responsive et mode sombre
+- **CRUD Complet** - Création, lecture, modification et suppression des utilisateurs
+- **Middleware de Sécurité** - Autorisation basée sur les rôles (requireAdmin, requireCoordinator)
+- **Recherche et Filtres** - Recherche par nom/email et filtrage par rôle
+- **Statistiques en Temps Réel** - Nombre total d'utilisateurs par rôle
+- **Journal d'Activités** - Logging automatique de toutes les actions admin
+- **Validations Avancées** - Protection contre l'auto-suppression et le dernier admin
+
+**Accès rapide :** Menu latéral > Section "Administration" > "Gestion des Utilisateurs"
+
+📚 **Documentation complète :**
+- [Guide de Démarrage Rapide](./docs/ADMIN_QUICKSTART.md) - Configuration en 5 minutes
+- [Documentation Technique](./docs/ADMIN_FEATURES.md) - Détails complets de l'implémentation
+
+### ✅ Campagnes d'Évaluation et Notifications (Coordinateur)
+
+Un système complet de gestion des évaluations et notifications a été implémenté :
+
+#### 📊 Campagnes d'Évaluation
+- **Interface de Gestion** - Page `/coordinateur/evaluations` avec tableau de bord statistiques
+- **Création de Campagnes** - Formulaire de création avec sélection module/intervenant
+- **Génération de Liens** - Liens d'évaluation uniques générés automatiquement
+- **Gestion du Cycle de Vie** - États: Brouillon → Envoyée → En cours → Terminée
+- **Statistiques Détaillées** - Taux de participation, nombre de réponses, notes moyennes
+- **Envoi Automatique** - Notification email aux intervenants lors de l'envoi
+
+#### 🔔 Système de Notifications
+- **Notifications en Temps Réel** - Badge dans le menu avec compteur de notifications non lues
+- **Interface de Consultation** - Page `/coordinateur/notifications` avec filtres (toutes/lues/non lues)
+- **Types de Notifications** :
+  - Modifications de planning
+  - Conflits détectés
+  - Modules sans intervenant
+  - Programmes en retard
+  - Modules démarrant prochainement
+  - Évaluations disponibles
+- **Actions Groupées** - Marquer comme lu, supprimer plusieurs notifications
+- **Rafraîchissement Auto** - Vérification toutes les 30 secondes
+
+#### 📧 Alertes Email Automatiques
+- **Templates Professionnels** - Emails HTML responsive avec branding BEM
+- **Notifications de Planning** - Alertes lors de modifications de séances
+- **Alertes de Conflits** - Détails complets des conflits avec séveritémise en évidence
+- **Rappels Automatiques** - Modules démarrant dans les 7 prochains jours
+- **Rapports Hebdomadaires** - Résumé automatique des programmes et modules
+
+**Accès rapide :**
+- Campagnes : Menu latéral > "Coordination" > "Campagnes d'Évaluation"
+- Notifications : Menu latéral > "Coordination" > "Notifications" ou icône cloche en haut à droite
+
+---
+
 ## Acteurs et Fonctionnalités
 
 ### 1. Administrateur (ADMIN)
@@ -50,12 +108,12 @@
 
 #### Fonctionnalités principales
 
-##### Gestion des utilisateurs
-- Création, modification et suppression des comptes utilisateurs
-- Attribution et modification des rôles (Admin, Coordinateur, Enseignant)
-- Gestion des droits d'accès et permissions
-- Réinitialisation des mots de passe
-- Consultation de l'historique des connexions
+##### Gestion des utilisateurs ✅ IMPLÉMENTÉ
+- ✅ Création, modification et suppression des comptes utilisateurs via interface web
+- ✅ Attribution et modification des rôles (Admin, Coordinateur, Enseignant)
+- ✅ Gestion des droits d'accès avec middleware de sécurité
+- ✅ Changement de mot de passe pour tout utilisateur
+- ✅ Consultation de l'historique dans le journal d'activités
 
 ##### Gestion des ressources pédagogiques
 - **Salles de cours**
@@ -199,12 +257,15 @@
   - Suivi de l'assiduité (présences, absences)
   - Calcul du taux de présence
 
-- **Évaluation des enseignements**
-  - Création de campagnes d'évaluation
-  - Génération de liens d'évaluation
-  - Définition des périodes d'évaluation
-  - Consultation des résultats (qualité cours, pédagogie, disponibilité)
-  - Analyse du taux de participation
+- **Évaluation des enseignements** ✅ IMPLÉMENTÉ
+  - ✅ Création de campagnes d'évaluation via interface web
+  - ✅ Génération automatique de liens d'évaluation uniques
+  - ✅ Définition des périodes d'évaluation avec dates de début et fin
+  - ✅ Gestion du statut des campagnes (Brouillon, Envoyée, En cours, Terminée)
+  - ✅ Envoi automatique des notifications aux intervenants
+  - ✅ Consultation des résultats (qualité cours, pédagogie, disponibilité)
+  - ✅ Analyse du taux de participation (nombre de réponses/invitations)
+  - ✅ Statistiques globales des campagnes d'évaluation
 
 ##### Consultation et exports
 - **Visualisation des plannings**
@@ -219,9 +280,26 @@
   - Export iCal pour synchronisation avec agendas
   - Génération de plannings imprimables
 
-##### Communication
-- Notifications des modifications de planning
-- Alertes en cas de conflit détecté
+##### Communication ✅ IMPLÉMENTÉ
+- ✅ **Système de notifications en temps réel**
+  - Notifications des modifications de planning
+  - Alertes en cas de conflit détecté
+  - Notifications pour modules sans intervenant
+  - Alertes pour programmes en retard
+  - Badge de notifications non lues dans le menu
+  - Interface de gestion des notifications
+  - Marquage des notifications comme lues
+  - Suppression de notifications
+
+- ✅ **Alertes email automatiques**
+  - Email de notification pour modifications de planning
+  - Email d'alerte pour conflits détectés avec détails des séances
+  - Email pour modules sans intervenant assigné
+  - Email pour programmes en retard
+  - Email pour modules démarrant prochainement
+  - Email de disponibilité des campagnes d'évaluation
+  - Rapports hebdomadaires automatisés
+
 - Communication avec les intervenants via le système
 - Diffusion des emplois du temps aux étudiants
 

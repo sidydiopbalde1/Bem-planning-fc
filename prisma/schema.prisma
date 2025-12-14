@@ -332,8 +332,10 @@ model EvaluationEnseignement {
   noteDisponibilite    Float?
   noteMoyenne          Float?
   nombreReponses       Int         @default(0)
+  nombreInvitations    Int         @default(0)
   tauxParticipation    Float?
   commentaires         String?
+  statut               StatutCampagne @default(BROUILLON)
   createdAt            DateTime    @default(now())
   updatedAt            DateTime    @updatedAt
   intervenant          Intervenant @relation(fields: [intervenantId], references: [id], onDelete: Cascade)
@@ -341,6 +343,7 @@ model EvaluationEnseignement {
 
   @@index([moduleId])
   @@index([intervenantId])
+  @@index([statut])
   @@map("evaluations_enseignements")
 }
 
@@ -414,6 +417,52 @@ enum TypeDisponibilite {
   PREFERENCE
 }
 
+model Notification {
+  id            String           @id @default(cuid())
+  titre         String
+  message       String
+  type          TypeNotification
+  priorite      PrioriteNotification @default(NORMALE)
+  lu            Boolean          @default(false)
+  destinataireId String
+  entite        String?
+  entiteId      String?
+  lienAction    String?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  @@index([destinataireId])
+  @@index([lu])
+  @@index([type])
+  @@index([createdAt])
+  @@map("notifications")
+}
+
+enum TypeNotification {
+  MODIFICATION_PLANNING
+  CONFLIT_DETECTE
+  MODULE_SANS_INTERVENANT
+  PROGRAMME_EN_RETARD
+  MODULE_PROCHAIN
+  EVALUATION_DISPONIBLE
+  SYSTEME
+}
+
+enum PrioriteNotification {
+  BASSE
+  NORMALE
+  HAUTE
+  URGENTE
+}
+
+enum StatutCampagne {
+  BROUILLON
+  ENVOYEE
+  EN_COURS
+  TERMINEE
+  ANNULEE
+}
+
 enum ActionType {
   CREATION
   MODIFICATION
@@ -423,4 +472,5 @@ enum ActionType {
   PLANIFICATION_AUTO
   RESOLUTION_CONFLIT
   EXPORT_DONNEES
+  ALERTE
 }

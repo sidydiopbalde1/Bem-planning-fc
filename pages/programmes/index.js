@@ -5,6 +5,7 @@ import Head from 'next/head';
 import Link from 'next/link';
 import Layout from '../../components/layout';
 import CreateProgrammeModal from '../../components/modals/CreateProgrammeModal';
+import ImportExcelModal from '../../components/modals/ImportExcelModal';
 import PageTransition, { AnimatedCard, AnimatedButton, AnimatedStats, SlideIn, FadeIn } from '../../components/ui/PageTransition';
 import {
   BookOpen,
@@ -22,7 +23,8 @@ import {
   MoreVertical,
   Settings,
   Copy,
-  Archive
+  Archive,
+  Upload
 } from 'lucide-react';
 
 export default function ProgrammesPage() {
@@ -32,6 +34,7 @@ export default function ProgrammesPage() {
   const [filteredProgrammes, setFilteredProgrammes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
   const [filterSemestre, setFilterSemestre] = useState('all');
@@ -114,6 +117,12 @@ export default function ProgrammesPage() {
   const handleCreateSuccess = (newProgramme) => {
     setProgrammes(prev => [newProgramme, ...prev]);
     setShowCreateModal(false);
+  };
+
+  const handleImportSuccess = (data) => {
+    // Rafraîchir la liste des programmes après l'importation
+    fetchProgrammes();
+    setShowImportModal(false);
   };
 
   const handleDelete = async (programmeId) => {
@@ -235,7 +244,14 @@ export default function ProgrammesPage() {
                 Gérez vos maquettes pédagogiques et programmes de formation continue
               </p>
             </div>
-            <div className="mt-4 lg:mt-0">
+            <div className="mt-4 lg:mt-0 flex gap-3">
+              <button
+                onClick={() => setShowImportModal(true)}
+                className="flex items-center space-x-2 px-6 py-3 bg-white border-2 border-blue-600 text-blue-600 rounded-xl hover:bg-blue-50 transition-all duration-200 font-semibold shadow-lg hover:shadow-xl"
+              >
+                <Upload className="h-5 w-5" />
+                <span>Importer Excel</span>
+              </button>
               <AnimatedButton
                 onClick={() => setShowCreateModal(true)}
                 variant="primary"
@@ -544,6 +560,13 @@ export default function ProgrammesPage() {
           onSuccess={handleCreateSuccess}
         />
       )}
+
+      {/* Modal d'importation Excel */}
+      <ImportExcelModal
+        isOpen={showImportModal}
+        onClose={() => setShowImportModal(false)}
+        onImportSuccess={handleImportSuccess}
+      />
     </Layout>
   );
 }

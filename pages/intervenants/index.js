@@ -5,14 +5,15 @@ import { useRouter } from 'next/router';
 import Head from 'next/head';
 import Layout from '../../components/layout.js';
 import CreateIntervenantModal from '../../components/modals/CreateIntervenantModal.js';
-import { 
-  Users, 
-  Plus, 
-  Search, 
-  Filter, 
-  Edit, 
-  Trash2, 
-  Mail, 
+import ImportExcelModal from '../../components/modals/ImportExcelModal';
+import {
+  Users,
+  Plus,
+  Search,
+  Filter,
+  Edit,
+  Trash2,
+  Mail,
   Phone,
   MapPin,
   Star,
@@ -20,7 +21,9 @@ import {
   Eye,
   CheckCircle,
   XCircle,
-  AlertCircle
+  AlertCircle,
+  Upload,
+  Download
 } from 'lucide-react';
 
 export default function IntervenantsPage() {
