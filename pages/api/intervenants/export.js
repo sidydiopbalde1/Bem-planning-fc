@@ -18,6 +18,14 @@ export default async function handler(req, res) {
       return res.status(403).json({ error: 'Accès non autorisé' });
     }
 
+    // Vérifier que l'utilisateur n'est pas un simple intervenant (TEACHER)
+    // Seuls les ADMIN et COORDINATOR peuvent exporter la liste des intervenants
+    if (session.user.role === 'TEACHER') {
+      return res.status(403).json({
+        error: 'Accès refusé. Vous n\'avez pas les permissions nécessaires pour exporter les intervenants.'
+      });
+    }
+
     // Récupérer tous les intervenants avec leurs disponibilités
     const intervenants = await prisma.intervenant.findMany({
       include: {

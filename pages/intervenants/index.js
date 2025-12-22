@@ -2,6 +2,8 @@
 import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/router';
+import { getServerSession } from 'next-auth/next';
+import { authOptions } from '../api/auth/[...nextauth]';
 import Head from 'next/head';
 import Layout from '../../components/layout.js';
 import CreateIntervenantModal from '../../components/modals/CreateIntervenantModal.js';
@@ -42,7 +44,7 @@ export default function IntervenantsPage() {
       router.push('/auth/signin');
       return;
     }
-    
+
     if (status === 'authenticated') {
       fetchIntervenants();
     }
@@ -439,4 +441,34 @@ export default function IntervenantsPage() {
       )}
     </Layout>
   );
+}
+
+// Vérification côté serveur pour bloquer l'accès aux TEACHER
+export async function getServerSideProps(context) {
+  const session = await getServerSession(context.req, context.res, authOptions);
+
+  // Rediriger si non authentifié
+  if (!session) {
+    return {
+      redirect: {
+        destination: '/auth/signin',
+        permanent: false,
+      },
+    };
+  }
+
+  // Bloquer l'accès aux TEACHER (intervenants)
+  if (session.user.role === 'TEACHER') {
+    return {
+      redirect: {
+        destination: '/intervenant/mes-seances',
+        permanent: false,
+      },
+    };
+  }
+
+  // Autoriser l'accès aux ADMIN et COORDINATOR
+  return {
+    props: {},
+  };
 }

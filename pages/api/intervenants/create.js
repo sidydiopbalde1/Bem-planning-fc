@@ -12,9 +12,17 @@ export default async function handler(req, res) {
 
   try {
     const session = await getServerSession(req, res, authOptions);
-    
+
     if (!session || !session.user) {
       return res.status(401).json({ error: 'Non authentifié' });
+    }
+
+    // Vérifier que l'utilisateur n'est pas un simple intervenant (TEACHER)
+    // Seuls les ADMIN et COORDINATOR peuvent créer des intervenants
+    if (session.user.role === 'TEACHER') {
+      return res.status(403).json({
+        error: 'Accès refusé. Vous n\'avez pas les permissions nécessaires pour créer un intervenant.'
+      });
     }
 
     const {

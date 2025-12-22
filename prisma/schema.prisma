@@ -18,6 +18,9 @@ model User {
   indicateursAcademiques IndicateurAcademique[]
   modules                Module[]
   programmes             Programme[]
+  rotationsResponsable   RotationWeekend[]      @relation("ResponsableRotation")
+  rotationsSubstitut     RotationWeekend[]      @relation("SubstitutRotation")
+  disponibilites         DisponibiliteResponsable[] @relation("DisponibilitesResponsable")
 
   @@index([email])
   @@map("users")
@@ -473,4 +476,103 @@ enum ActionType {
   RESOLUTION_CONFLIT
   EXPORT_DONNEES
   ALERTE
+}
+
+// ============================================
+// SYSTÈME DE ROTATION WEEKEND
+// ============================================
+
+model RotationWeekend {
+  id                String              @id @default(cuid())
+  dateDebut         DateTime            // Date du samedi (début du weekend)
+  dateFin           DateTime            // Date du dimanche (fin du weekend)
+  semaineNumero     Int                 // Numéro de la semaine dans l'année
+  annee             Int                 // Année
+  responsableId     String              // User ID du responsable assigné
+  responsable       User                @relation("ResponsableRotation", fields: [responsableId], references: [id])
+  substitutId       String?             // User ID du substitut en cas d'absence
+  substitut         User?               @relation("SubstitutRotation", fields: [substitutId], references: [id])
+  status            StatutRotation      @default(PLANIFIE)
+  nbSeancesTotal    Int                 @default(0)  // Nombre de séances prévues ce weekend
+  nbSeancesRealisees Int               @default(0)  // Nombre de séances effectuées
+  commentaire       String?             // Notes ou commentaires
+  estAbsence        Boolean             @default(false) // True si remplacement pour absence
+  notificationEnvoyee Boolean           @default(false) // Notification 7j envoyée
+  rappelEnvoye      Boolean             @default(false) // Rappel 48h envoyé
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  createdBy         String?             // User qui a créé/modifié
+  rapportSupervision RapportSupervision?
+
+  @@unique([dateDebut, responsableId])
+  @@index([responsableId])
+  @@index([dateDebut])
+  @@index([status])
+  @@index([semaineNumero, annee])
+  @@map("rotations_weekend")
+}
+
+model DisponibiliteResponsable {
+  id             String   @id @default(cuid())
+  responsableId  String   // User ID
+  responsable    User     @relation("DisponibilitesResponsable", fields: [responsableId], references: [id], onDelete: Cascade)
+  dateDebut      DateTime // Date du weekend
+  dateFin        DateTime
+  disponible     Boolean  @default(true) // False = indisponible
+  raison         String?  // Raison de l'indisponibilité
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([responsableId])
+  @@index([dateDebut])
+  @@map("disponibilites_responsables")
+}
+
+model RapportSupervision {
+  id                String          @id @default(cuid())
+  rotationId        String          @unique
+  rotation          RotationWeekend @relation(fields: [rotationId], references: [id], onDelete: Cascade)
+  heureArrivee      String?         // Heure d'arrivée du responsable
+  heureDepart       String?         // Heure de départ
+  nbSeancesVisitees Int             @default(0)
+  incidents         String?         // Description des incidents
+  observations      String?         // Observations générales
+  recommandations   String?         // Recommandations
+  satisfaction      Int?            // Note de satisfaction /5
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  @@index([rotationId])
+  @@map("rapports_supervision")
+}
+
+model StatistiqueRotation {
+  id                    String   @id @default(cuid())
+  responsableId         String   // User ID
+  annee                 Int
+  mois                  Int?     // Si null = stats annuelles
+  nbWeekendTotal        Int      @default(0)
+  nbWeekendRealises     Int      @default(0)
+  nbWeekendAbsences     Int      @default(0)
+  nbWeekendSubstitut    Int      @default(0) // Nombre de fois en tant que substitut
+  tauxPresence          Float    @default(0) // Pourcentage
+  nbSeancesTotal        Int      @default(0)
+  moyenneSatisfaction   Float?   // Moyenne des notes de satisfaction
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@unique([responsableId, annee, mois])
+  @@index([responsableId])
+  @@index([annee])
+  @@map("statistiques_rotation")
+}
+
+enum StatutRotation {
+  PLANIFIE          // Weekend planifié à l'avance
+  CONFIRME          // Responsable a confirmé sa présence
+  EN_COURS          // Weekend en cours
+  TERMINE           // Weekend terminé (avec rapport)
+  TERMINE_SANS_RAPPORT // Weekend terminé sans rapport
+  ABSENT            // Responsable absent (remplacé)
+  ANNULE            // Rotation annulée
 }

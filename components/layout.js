@@ -63,17 +63,24 @@ export default function Layout({ children, title = "Planning FC" }) {
     { name: 'Tableau de Bord', href: '/coordinateur/dashboard', icon: Home },
     { name: 'Mes Programmes', href: '/coordinateur/programmes', icon: BookOpen },
     { name: 'Gestion des Modules', href: '/coordinateur/modules', icon: Layers },
+    { name: 'Rotations Weekend', href: '/rotations-weekend', icon: Calendar },
     { name: 'Campagnes d\'Évaluation', href: '/coordinateur/evaluations', icon: Star },
     { name: 'Notifications', href: '/coordinateur/notifications', icon: Bell, badge: notificationsCount },
   ] : [];
 
   // Navigation principale (outils communs)
-  const navigation = [
+  const navigationAll = [
     { name: 'Calendrier', href: '/calendar', icon: Calendar },
     { name: 'Programmes', href: '/programmes', icon: BookOpen },
-    { name: 'Intervenants', href: '/intervenants', icon: Users },
+    { name: 'Intervenants', href: '/intervenants', icon: Users, roles: ['ADMIN', 'COORDINATOR'] }, // Masqué pour TEACHER
     { name: 'Statistiques', href: '/statistics', icon: BarChart3 },
   ];
+
+  // Filtrer la navigation selon le rôle de l'utilisateur
+  const navigation = navigationAll.filter(item => {
+    if (!item.roles) return true; // Pas de restriction de rôle
+    return item.roles.includes(session?.user?.role);
+  });
 
   // Paramètres (affiché en dernier)
   const settingsNavigation = [

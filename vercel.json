@@ -1,0 +1,12 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/check-unfinished-sessions?key=$CRON_SECRET_KEY",
+      "schedule": "0 18 * * *"
+    },
+    {
+      "path": "/api/cron/check-rotations-weekend?key=$CRON_SECRET_KEY",
+      "schedule": "0 9 * * *"
+    }
+  ]
+}
