@@ -3,7 +3,7 @@ import * as _NextAuth from 'next-auth';
 import * as _CredentialsProvider from 'next-auth/providers/credentials';
 import * as _GoogleProvider from 'next-auth/providers/google';
 import { PrismaAdapter } from "@next-auth/prisma-adapter";
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../../../lib/prisma';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 
@@ -11,8 +11,6 @@ import jwt from 'jsonwebtoken';
 const NextAuth = _NextAuth.default || _NextAuth;
 const CredentialsProvider = _CredentialsProvider.default || _CredentialsProvider;
 const GoogleProvider = _GoogleProvider.default || _GoogleProvider;
-
-const prisma = new PrismaClient();
 
 /**
  * Helper pour journaliser les événements d'authentification
