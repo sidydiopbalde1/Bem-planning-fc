@@ -1,46 +1,14 @@
 // pages/api/auth/[...nextauth].js
-import NextAuth from 'next-auth';
-import CredentialsProvider from 'next-auth/providers/credentials';
+import * as NextAuthModule from 'next-auth';
+import * as CredentialsProviderModule from 'next-auth/providers/credentials';
 import { prisma } from '../../../lib/prisma';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 
+// Fix ESM/CJS interop for standalone mode
+const NextAuth = NextAuthModule.default || NextAuthModule;
+const CredentialsProvider = CredentialsProviderModule.default || CredentialsProviderModule;
 
-
-
-
-/**
- * Helper pour journaliser les événements d'authentification
- */
-async function logAuthEvent(action, user, additionalInfo = {}) {
-  try {
-    await prisma.journalActivite.create({
-      data: {
-        action: action,
-        entite: 'Authentification',
-        entiteId: user?.id || 'unknown',
-        description: additionalInfo.description || `${action} - ${user?.email || 'Utilisateur inconnu'}`,
-        ancienneValeur: null,
-        nouvelleValeur: JSON.stringify({
-          email: user?.email,
-          name: user?.name,
-          role: user?.role,
-          provider: additionalInfo.provider || 'credentials',
-          timestamp: new Date().toISOString()
-        }),
-        userId: user?.id || 'system',
-        userName: user?.name || user?.email || 'Système',
-        ipAddress: additionalInfo.ipAddress || null,
-        userAgent: additionalInfo.userAgent || null,
-      }
-    });
-  } catch (error) {
-    console.error('Erreur journalisation auth:', error);
-  }
-}
-
-
-// Extraire la configuration dans une constante exportée
 export const authOptions = {
   providers: [
     CredentialsProvider({
@@ -54,27 +22,33 @@ export const authOptions = {
           return null;
         }
 
-        const user = await prisma.user.findUnique({
-          where: { email: credentials.email },
-        });
+        try {
+          const user = await prisma.user.findUnique({
+            where: { email: credentials.email },
+          });
 
-        if (!user || !user.password) return null;
+          if (!user || !user.password) return null;
 
-        const valid = await bcrypt.compare(credentials.password, user.password);
-        if (!valid) return null;
+          const valid = await bcrypt.compare(credentials.password, user.password);
+          if (!valid) return null;
 
-        return {
-          id: user.id,
-          email: user.email,
-          name: user.name,
-          role: user.role,
-        };
+          return {
+            id: user.id,
+            email: user.email,
+            name: user.name,
+            role: user.role,
+          };
+        } catch (error) {
+          console.error('Erreur authorize:', error);
+          return null;
+        }
       },
     }),
   ],
 
   session: {
     strategy: 'jwt',
+    maxAge: 30 * 24 * 60 * 60, // 30 jours
   },
 
   callbacks: {
@@ -92,17 +66,23 @@ export const authOptions = {
     },
 
     async session({ session, token }) {
-      session.user.id = token.id;
-      session.user.role = token.role;
-      session.accessToken = token.accessToken;
+      if (token) {
+        session.user.id = token.id;
+        session.user.role = token.role;
+        session.accessToken = token.accessToken;
+      }
       return session;
     },
   },
 
   pages: {
     signIn: '/auth/signin',
+    error: '/auth/error',
   },
 
   secret: process.env.NEXTAUTH_SECRET,
+  debug: process.env.NODE_ENV === 'development',
 };
-export default NextAuth(authOptions);
+
+const handler = NextAuth(authOptions);
+export default handler;

@@ -16,7 +16,8 @@ const nextConfig = {
     ignoreBuildErrors: true,
   },
   // Force bundling to fix ESM/CJS default export interop in standalone mode
-  transpilePackages: ['lucide-react', 'next-auth', 'bcryptjs', '@next-auth/prisma-adapter'],
+  transpilePackages: ['lucide-react', 'next-auth', 'bcryptjs', 'jsonwebtoken', '@next-auth/prisma-adapter'],
+  serverExternalPackages: ['@prisma/client', 'bcryptjs'],
   experimental: {
     optimizePackageImports: ['lucide-react'],
   },
