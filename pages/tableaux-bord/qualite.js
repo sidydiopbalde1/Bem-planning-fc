@@ -3,8 +3,9 @@ import { useSession, getSession } from 'next-auth/react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
 import Layout from '../../components/layout.js';
-import { Award, TrendingUp, Target, Calendar, Plus, Edit, Trash2, CheckCircle, XCircle } from 'lucide-react';
+import { Award, TrendingUp, Target, Calendar, Plus, Edit as EditIcon, Trash2, CheckCircle, XCircle } from 'lucide-react';
 import { FadeIn, SlideIn } from '../../components/ui/PageTransition.js';
+import apiClient from '../../lib/api-client';
 
 export default function TableauBordQualite({ initialProgrammes, initialPeriodes }) {
   const { data: session, status } = useSession();
@@ -38,14 +39,16 @@ export default function TableauBordQualite({ initialProgrammes, initialPeriodes 
   const fetchIndicateurs = async () => {
     setLoading(true);
     try {
-      const response = await fetch(
-        `/api/indicateurs-academiques?programmeId=${selectedProgramme}&periodeId=${selectedPeriode}`
-      );
-
-      if (response.ok) {
-        const data = await response.json();
-        setIndicateurs(data);
+      if (session?.accessToken) {
+        apiClient.setToken(session.accessToken);
       }
+
+      const data = await apiClient.indicateursAcademiques.getAll({
+        programmeId: selectedProgramme,
+        periodeId: selectedPeriode
+      });
+
+      setIndicateurs(data || []);
     } catch (error) {
       console.error('Erreur lors du chargement:', error);
     } finally {
@@ -55,33 +58,29 @@ export default function TableauBordQualite({ initialProgrammes, initialPeriodes 
 
   const handleSubmitForm = async (formData) => {
     try {
-      const method = editingIndicateur ? 'PUT' : 'POST';
-      const url = editingIndicateur
-        ? `/api/indicateurs-academiques/${editingIndicateur.id}`
-        : '/api/indicateurs-academiques';
-
-      const response = await fetch(url, {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...formData,
-          programmeId: selectedProgramme,
-          periodeId: selectedPeriode,
-          responsableId: session.user.id
-        })
-      });
-
-      if (response.ok) {
-        setShowFormModal(false);
-        setEditingIndicateur(null);
-        fetchIndicateurs();
-      } else {
-        const error = await response.json();
-        alert(`Erreur: ${error.error || 'Une erreur est survenue'}`);
+      if (session?.accessToken) {
+        apiClient.setToken(session.accessToken);
       }
+
+      const dataToSend = {
+        ...formData,
+        programmeId: selectedProgramme,
+        periodeId: selectedPeriode,
+        responsableId: session.user.id
+      };
+
+      if (editingIndicateur) {
+        await apiClient.indicateursAcademiques.update(editingIndicateur.id, dataToSend);
+      } else {
+        await apiClient.indicateursAcademiques.create(dataToSend);
+      }
+
+      setShowFormModal(false);
+      setEditingIndicateur(null);
+      fetchIndicateurs();
     } catch (error) {
       console.error('Erreur:', error);
-      alert('Erreur lors de l\'enregistrement');
+      alert(`Erreur: ${error.message || 'Une erreur est survenue'}`);
     }
   };
 
@@ -89,13 +88,12 @@ export default function TableauBordQualite({ initialProgrammes, initialPeriodes 
     if (!confirm('Êtes-vous sûr de vouloir supprimer cet indicateur ?')) return;
 
     try {
-      const response = await fetch(`/api/indicateurs-academiques/${id}`, {
-        method: 'DELETE'
-      });
-
-      if (response.ok) {
-        fetchIndicateurs();
+      if (session?.accessToken) {
+        apiClient.setToken(session.accessToken);
       }
+
+      await apiClient.indicateursAcademiques.delete(id);
+      fetchIndicateurs();
     } catch (error) {
       console.error('Erreur lors de la suppression:', error);
     }
@@ -388,7 +386,7 @@ export default function TableauBordQualite({ initialProgrammes, initialPeriodes 
                                   }}
                                   className="text-blue-600 hover:text-blue-900"
                                 >
-                                  <Edit className="h-5 w-5" />
+                                  <EditIcon className="h-5 w-5" />
                                 </button>
                                 <button
                                   onClick={() => handleDelete(indicateur.id)}
@@ -627,24 +625,44 @@ export async function getServerSideProps(context) {
   }
 
   try {
-    const baseUrl = process.env.NEXTAUTH_URL || 'http://localhost:3000';
+    const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002/api';
+    const token = session.accessToken;
+
+    const headers = {
+      'Content-Type': 'application/json',
+      ...(token && { 'Authorization': `Bearer ${token}` }),
+    };
 
     const [programmesRes, periodesRes] = await Promise.all([
-      fetch(`${baseUrl}/api/programmes`, {
-        headers: { Cookie: context.req.headers.cookie || '' },
-      }),
-      fetch(`${baseUrl}/api/periodes-academiques`, {
-        headers: { Cookie: context.req.headers.cookie || '' },
-      }),
+      fetch(`${apiBaseUrl}/programmes`, { headers }),
+      fetch(`${apiBaseUrl}/periodes-academiques`, { headers }),
     ]);
 
-    const programmesData = programmesRes.ok ? await programmesRes.json() : {};
+    const programmesData = programmesRes.ok ? await programmesRes.json() : { programmes: [] };
     const periodesData = periodesRes.ok ? await periodesRes.json() : [];
+
+    // Ensure programmes is always an array
+    let programmes = [];
+    if (Array.isArray(programmesData)) {
+      programmes = programmesData;
+    } else if (programmesData && Array.isArray(programmesData.programmes)) {
+      programmes = programmesData.programmes;
+    } else if (programmesData && Array.isArray(programmesData.data)) {
+      programmes = programmesData.data;
+    }
+
+    // Ensure periodes is always an array
+    let periodes = [];
+    if (Array.isArray(periodesData)) {
+      periodes = periodesData;
+    } else if (periodesData && Array.isArray(periodesData.data)) {
+      periodes = periodesData.data;
+    }
 
     return {
       props: {
-        initialProgrammes: programmesData.programmes || [],
-        initialPeriodes: periodesData || [],
+        initialProgrammes: programmes,
+        initialPeriodes: periodes,
       },
     };
   } catch (error) {

@@ -9,6 +9,7 @@ import {
   BarChart3, Download, Calendar, TrendingUp, Users, DoorClosed,
   Activity, AlertCircle, CheckCircle, FileText, ArrowUp, ArrowDown
 } from 'lucide-react';
+import apiClient from '../../lib/api-client';
 
 export default function RapportsManagement() {
   const { data: session, status } = useSession();
@@ -39,11 +40,11 @@ export default function RapportsManagement() {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [dashResp] = await Promise.all([
-        fetch('/api/admin/stats/dashboard')
-      ]);
+      if (session?.accessToken) {
+        apiClient.setToken(session.accessToken);
+      }
 
-      const dashData = await dashResp.json();
+      const dashData = await apiClient.admin.getStats();
       setDashboardData(dashData);
     } catch (error) {
       console.error('Erreur lors du chargement des données:', error);
@@ -54,12 +55,15 @@ export default function RapportsManagement() {
 
   const fetchStatsSalles = async () => {
     try {
-      const params = new URLSearchParams();
-      if (dateDebut) params.append('dateDebut', dateDebut);
-      if (dateFin) params.append('dateFin', dateFin);
+      if (session?.accessToken) {
+        apiClient.setToken(session.accessToken);
+      }
 
-      const response = await fetch(`/api/admin/stats/salles?${params}`);
-      const data = await response.json();
+      const params = {};
+      if (dateDebut) params.dateDebut = dateDebut;
+      if (dateFin) params.dateFin = dateFin;
+
+      const data = await apiClient.admin.getSallesStats(params);
       setStatsSalles(data);
     } catch (error) {
       console.error('Erreur:', error);
@@ -68,12 +72,15 @@ export default function RapportsManagement() {
 
   const fetchStatsIntervenants = async () => {
     try {
-      const params = new URLSearchParams();
-      if (dateDebut) params.append('dateDebut', dateDebut);
-      if (dateFin) params.append('dateFin', dateFin);
+      if (session?.accessToken) {
+        apiClient.setToken(session.accessToken);
+      }
 
-      const response = await fetch(`/api/admin/stats/intervenants?${params}`);
-      const data = await response.json();
+      const params = {};
+      if (dateDebut) params.dateDebut = dateDebut;
+      if (dateFin) params.dateFin = dateFin;
+
+      const data = await apiClient.admin.getIntervenantsStats(params);
       setStatsIntervenants(data);
     } catch (error) {
       console.error('Erreur:', error);
@@ -81,11 +88,12 @@ export default function RapportsManagement() {
   };
 
   const handleExport = (type) => {
+    const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002/api';
     const params = new URLSearchParams({ type });
     if (dateDebut) params.append('dateDebut', dateDebut);
     if (dateFin) params.append('dateFin', dateFin);
 
-    window.open(`/api/admin/export/excel?${params}`, '_blank');
+    window.open(`${apiBaseUrl}/admin/export/excel?${params}`, '_blank');
   };
 
   if (status === 'loading' || loading) {
@@ -202,20 +210,19 @@ export default function RapportsManagement() {
 }
 
 function DashboardTab({ data, onExport }) {
-  const getScoreColor = (score) => {
-    if (score >= 80) return 'text-green-600';
-    if (score >= 60) return 'text-yellow-600';
-    return 'text-red-600';
-  };
+  // Calculer les stats par statut pour les séances
+  const seancesTerminees = data.seancesByStatus?.TERMINEE || 0;
+  const seancesTotal = data.counts?.seances || 0;
+  const tauxCompletion = seancesTotal > 0 ? Math.round((seancesTerminees / seancesTotal) * 100) : 0;
 
   return (
     <div className="space-y-6">
-      {/* Score de santé */}
+      {/* En-tête avec export */}
       <AnimatedCard delay={0.1}>
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xl font-bold text-gray-900 dark:text-white">
-              Santé du Système
+              Vue d'ensemble
             </h2>
             <button
               onClick={() => onExport('dashboard')}
@@ -226,30 +233,20 @@ function DashboardTab({ data, onExport }) {
             </button>
           </div>
           <div className="flex items-center">
-            <div className={`text-6xl font-bold ${getScoreColor(data.sante.score)}`}>
-              {data.sante.score}
+            <div className="text-4xl font-bold text-blue-600">
+              {Math.round(data.avgProgression || 0)}%
             </div>
             <div className="ml-4">
               <p className="text-sm text-gray-600 dark:text-gray-400">
-                Score de santé global
+                Progression moyenne des programmes
               </p>
-              {data.sante.alertes.length > 0 && (
-                <div className="mt-2 space-y-1">
-                  {data.sante.alertes.map((alerte, i) => (
-                    <div key={i} className="flex items-start text-sm">
-                      <AlertCircle className="w-4 h-4 mr-2 text-orange-500 flex-shrink-0 mt-0.5" />
-                      <span className="text-gray-700 dark:text-gray-300">{alerte.message}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
             </div>
           </div>
         </div>
       </AnimatedCard>
 
       {/* KPIs Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
         {/* Utilisateurs */}
         <AnimatedCard delay={0.2}>
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
@@ -257,7 +254,7 @@ function DashboardTab({ data, onExport }) {
               <div>
                 <p className="text-sm text-gray-600 dark:text-gray-400">Utilisateurs</p>
                 <p className="text-2xl font-bold text-gray-900 dark:text-white">
-                  {data.kpis.utilisateurs.total}
+                  {data.counts?.users || 0}
                 </p>
               </div>
               <Users className="w-10 h-10 text-blue-400" />
@@ -272,10 +269,10 @@ function DashboardTab({ data, onExport }) {
               <div>
                 <p className="text-sm text-gray-600 dark:text-gray-400">Programmes</p>
                 <p className="text-2xl font-bold text-gray-900 dark:text-white">
-                  {data.kpis.programmes.total}
+                  {data.counts?.programmes || 0}
                 </p>
                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                  {data.kpis.programmes.progressionMoyenne}% progression
+                  {Math.round(data.avgProgression || 0)}% progression
                 </p>
               </div>
               <FileText className="w-10 h-10 text-green-400" />
@@ -290,10 +287,7 @@ function DashboardTab({ data, onExport }) {
               <div>
                 <p className="text-sm text-gray-600 dark:text-gray-400">Modules</p>
                 <p className="text-2xl font-bold text-gray-900 dark:text-white">
-                  {data.kpis.modules.total}
-                </p>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                  {data.kpis.modules.tauxCompletion}% complétés
+                  {data.counts?.modules || 0}
                 </p>
               </div>
               <Activity className="w-10 h-10 text-purple-400" />
@@ -301,60 +295,81 @@ function DashboardTab({ data, onExport }) {
           </div>
         </AnimatedCard>
 
-        {/* Séances ce mois */}
+        {/* Séances */}
         <AnimatedCard delay={0.5}>
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600 dark:text-gray-400">Séances (ce mois)</p>
+                <p className="text-sm text-gray-600 dark:text-gray-400">Séances</p>
                 <p className="text-2xl font-bold text-gray-900 dark:text-white">
-                  {data.kpis.seances.ceMois}
+                  {data.counts?.seances || 0}
                 </p>
                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                  {data.kpis.seances.total} total
+                  {tauxCompletion}% terminées
                 </p>
               </div>
               <Calendar className="w-10 h-10 text-orange-400" />
             </div>
           </div>
         </AnimatedCard>
-      </div>
 
-      {/* Conflits */}
-      {data.kpis.conflits.total > 0 && (
+        {/* Intervenants */}
         <AnimatedCard delay={0.6}>
-          <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-6">
-            <div className="flex items-center">
-              <AlertCircle className="w-6 h-6 text-red-600 mr-3" />
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+            <div className="flex items-center justify-between">
               <div>
-                <h3 className="text-lg font-semibold text-red-900 dark:text-red-200">
-                  {data.kpis.conflits.total} conflit(s) non résolu(s)
-                </h3>
-                <p className="text-sm text-red-700 dark:text-red-300 mt-1">
-                  Ces conflits nécessitent votre attention
+                <p className="text-sm text-gray-600 dark:text-gray-400">Intervenants</p>
+                <p className="text-2xl font-bold text-gray-900 dark:text-white">
+                  {data.counts?.intervenants || 0}
                 </p>
               </div>
+              <Users className="w-10 h-10 text-indigo-400" />
+            </div>
+          </div>
+        </AnimatedCard>
+      </div>
+
+      {/* Statuts des programmes */}
+      {data.programmesByStatus && Object.keys(data.programmesByStatus).length > 0 && (
+        <AnimatedCard delay={0.7}>
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+              Programmes par statut
+            </h3>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              {Object.entries(data.programmesByStatus).map(([status, count]) => (
+                <div key={status} className="text-center p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
+                  <p className="text-2xl font-bold text-gray-900 dark:text-white">{count}</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 capitalize">
+                    {status.toLowerCase().replace('_', ' ')}
+                  </p>
+                </div>
+              ))}
             </div>
           </div>
         </AnimatedCard>
       )}
 
-      {/* Top utilisateurs actifs */}
-      <AnimatedCard delay={0.7}>
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-            Utilisateurs les plus actifs (30 derniers jours)
-          </h3>
-          <div className="space-y-3">
-            {data.activite.topUtilisateurs.map((user, i) => (
-              <div key={i} className="flex items-center justify-between">
-                <span className="text-sm text-gray-700 dark:text-gray-300">{user.nom}</span>
-                <span className="text-sm font-medium text-blue-600">{user.actions} actions</span>
-              </div>
-            ))}
+      {/* Statuts des séances */}
+      {data.seancesByStatus && Object.keys(data.seancesByStatus).length > 0 && (
+        <AnimatedCard delay={0.8}>
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+              Séances par statut
+            </h3>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              {Object.entries(data.seancesByStatus).map(([status, count]) => (
+                <div key={status} className="text-center p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
+                  <p className="text-2xl font-bold text-gray-900 dark:text-white">{count}</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 capitalize">
+                    {status.toLowerCase().replace('_', ' ')}
+                  </p>
+                </div>
+              ))}
+            </div>
           </div>
-        </div>
-      </AnimatedCard>
+        </AnimatedCard>
+      )}
     </div>
   );
 }
@@ -518,57 +533,59 @@ function IntervenantsTab({ data, dateDebut, dateFin, onDateChange, onRefresh, on
       {data ? (
         <>
           {/* Stats générales */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
             <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-              <p className="text-sm text-gray-600 dark:text-gray-400">Taux de charge moyen</p>
-              <p className="text-3xl font-bold text-blue-600">{data.general.tauxChargeMoyen}%</p>
+              <p className="text-sm text-gray-600 dark:text-gray-400">Total intervenants</p>
+              <p className="text-3xl font-bold text-blue-600">{data.total || 0}</p>
             </div>
             <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-              <p className="text-sm text-gray-600 dark:text-gray-400">En surcharge</p>
-              <p className="text-3xl font-bold text-red-600">{data.alertes.nombreSurcharges}</p>
+              <p className="text-sm text-gray-600 dark:text-gray-400">Disponibles</p>
+              <p className="text-3xl font-bold text-green-600">{data.disponibles || 0}</p>
             </div>
             <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-              <p className="text-sm text-gray-600 dark:text-gray-400">Sous-utilisés</p>
-              <p className="text-3xl font-bold text-yellow-600">{data.alertes.nombreSousUtilises}</p>
+              <p className="text-sm text-gray-600 dark:text-gray-400">Indisponibles</p>
+              <p className="text-3xl font-bold text-red-600">{data.indisponibles || 0}</p>
+            </div>
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+              <p className="text-sm text-gray-600 dark:text-gray-400">Sans modules</p>
+              <p className="text-3xl font-bold text-yellow-600">{data.sansModules || 0}</p>
             </div>
           </div>
 
-          {/* Top 10 intervenants */}
+          {/* Liste des intervenants */}
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
             <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-              Top 10 des intervenants les plus chargés
+              Détails des intervenants
             </h3>
             <div className="overflow-x-auto">
               <table className="min-w-full">
                 <thead>
                   <tr className="border-b border-gray-200 dark:border-gray-700">
                     <th className="text-left py-3 text-sm font-medium text-gray-500 dark:text-gray-400">Intervenant</th>
-                    <th className="text-left py-3 text-sm font-medium text-gray-500 dark:text-gray-400">Spécialité</th>
-                    <th className="text-right py-3 text-sm font-medium text-gray-500 dark:text-gray-400">CM</th>
-                    <th className="text-right py-3 text-sm font-medium text-gray-500 dark:text-gray-400">TD</th>
-                    <th className="text-right py-3 text-sm font-medium text-gray-500 dark:text-gray-400">TP</th>
-                    <th className="text-right py-3 text-sm font-medium text-gray-500 dark:text-gray-400">Total</th>
-                    <th className="text-right py-3 text-sm font-medium text-gray-500 dark:text-gray-400">Charge</th>
+                    <th className="text-center py-3 text-sm font-medium text-gray-500 dark:text-gray-400">Disponible</th>
+                    <th className="text-right py-3 text-sm font-medium text-gray-500 dark:text-gray-400">Modules</th>
+                    <th className="text-right py-3 text-sm font-medium text-gray-500 dark:text-gray-400">Séances</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {data.charge.top10Charges.map((int, i) => (
-                    <tr key={i} className="border-b border-gray-100 dark:border-gray-800">
+                  {(data.details || []).slice(0, 10).map((int) => (
+                    <tr key={int.id} className="border-b border-gray-100 dark:border-gray-800">
                       <td className="py-3 text-sm text-gray-900 dark:text-white">{int.nom}</td>
-                      <td className="py-3 text-sm text-gray-600 dark:text-gray-400">{int.specialite || '-'}</td>
-                      <td className="py-3 text-sm text-gray-600 dark:text-gray-400 text-right">{int.heuresParType.CM}h</td>
-                      <td className="py-3 text-sm text-gray-600 dark:text-gray-400 text-right">{int.heuresParType.TD}h</td>
-                      <td className="py-3 text-sm text-gray-600 dark:text-gray-400 text-right">{int.heuresParType.TP}h</td>
-                      <td className="py-3 text-sm font-medium text-gray-900 dark:text-white text-right">{int.totalHeures}h</td>
-                      <td className="py-3 text-sm font-medium text-right">
-                        <span className={`${
-                          int.tauxCharge >= 90 ? 'text-red-600' :
-                          int.tauxCharge >= 70 ? 'text-yellow-600' :
-                          'text-green-600'
-                        }`}>
-                          {int.tauxCharge}%
-                        </span>
+                      <td className="py-3 text-sm text-center">
+                        {int.disponible ? (
+                          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
+                            <CheckCircle className="w-3 h-3 mr-1" />
+                            Oui
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200">
+                            <AlertCircle className="w-3 h-3 mr-1" />
+                            Non
+                          </span>
+                        )}
                       </td>
+                      <td className="py-3 text-sm text-gray-600 dark:text-gray-400 text-right">{int.modulesCount}</td>
+                      <td className="py-3 text-sm text-gray-600 dark:text-gray-400 text-right">{int.seancesCount}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -576,18 +593,18 @@ function IntervenantsTab({ data, dateDebut, dateFin, onDateChange, onRefresh, on
             </div>
           </div>
 
-          {/* Alertes */}
-          {data.charge.surcharge.length > 0 && (
-            <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-6">
-              <h3 className="text-lg font-semibold text-red-900 dark:text-red-200 mb-3">
-                Intervenants en surcharge
+          {/* Alerte intervenants sans modules */}
+          {data.sansModules > 0 && (
+            <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-6">
+              <h3 className="text-lg font-semibold text-yellow-900 dark:text-yellow-200 mb-3">
+                Intervenants sans modules assignés
               </h3>
               <div className="space-y-2">
-                {data.charge.surcharge.map((int, i) => (
-                  <div key={i} className="flex items-center justify-between text-sm">
-                    <span className="text-red-700 dark:text-red-300">{int.nom}</span>
-                    <span className="text-red-900 dark:text-red-100 font-medium">
-                      {int.totalHeures}h ({int.tauxCharge}%)
+                {(data.details || []).filter(i => i.modulesCount === 0).map((int) => (
+                  <div key={int.id} className="flex items-center justify-between text-sm">
+                    <span className="text-yellow-700 dark:text-yellow-300">{int.nom}</span>
+                    <span className={`px-2 py-1 rounded text-xs ${int.disponible ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                      {int.disponible ? 'Disponible' : 'Indisponible'}
                     </span>
                   </div>
                 ))}
@@ -597,7 +614,7 @@ function IntervenantsTab({ data, dateDebut, dateFin, onDateChange, onRefresh, on
         </>
       ) : (
         <div className="text-center py-12">
-          <p className="text-gray-500 dark:text-gray-400">Sélectionnez une période et cliquez sur Actualiser</p>
+          <p className="text-gray-500 dark:text-gray-400">Cliquez sur Actualiser pour charger les données</p>
         </div>
       )}
     </div>

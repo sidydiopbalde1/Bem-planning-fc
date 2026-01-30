@@ -1,18 +1,13 @@
 // pages/api/admin/periodes.js
-import { getServerSession } from 'next-auth';
-import { authOptions } from '../auth/[...nextauth]';
 import { PrismaClient } from '@prisma/client';
+import { withAdmin } from '../../../lib/withApiHandler';
 
 const prisma = new PrismaClient();
 
-export default async function handler(req, res) {
+async function handler(req, res) {
+  const session = req.session;
+
   try {
-    const session = await getServerSession(req, res, authOptions);
-
-    if (!session || session.user.role !== 'ADMIN') {
-      return res.status(403).json({ error: 'Accès non autorisé' });
-    }
-
     switch (req.method) {
       case 'GET':
         return await handleGet(req, res);
@@ -26,6 +21,8 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: 'Erreur serveur', details: error.message });
   }
 }
+
+export default withAdmin(handler, { entity: 'PeriodeAcademique' });
 
 async function handleGet(req, res) {
   const { search, active, annee } = req.query;

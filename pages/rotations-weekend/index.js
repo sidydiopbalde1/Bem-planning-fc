@@ -2,9 +2,9 @@
 import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/router';
-import { getServerSession } from 'next-auth/next';
-import { authOptions } from '../api/auth/[...nextauth]';
 import Layout from '../../components/layout';
+import ConfirmModal from '../../components/modals/ConfirmModal';
+import apiClient from '../../lib/api-client';
 import {
   Calendar,
   Users,
@@ -21,6 +21,7 @@ import {
   ChevronRight
 } from 'lucide-react';
 
+
 export default function RotationsWeekendPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
@@ -32,75 +33,98 @@ export default function RotationsWeekendPage() {
   const [filtreStatus, setFiltreStatus] = useState('all');
   const [filtreResponsable, setFiltreResponsable] = useState('all');
   const [currentMonth, setCurrentMonth] = useState(new Date());
+  const [page, setPage] = useState(1);
+  const [pagination, setPagination] = useState({});
   const [showGenerateModal, setShowGenerateModal] = useState(false);
+  const [confirmModal, setConfirmModal] = useState({ isOpen: false, type: 'confirm', title: '', message: '', onConfirm: null });
+  const [alertModal, setAlertModal] = useState({ isOpen: false, type: 'success', title: '', message: '' });
 
   useEffect(() => {
+    if (status === 'unauthenticated') {
+      router.push('/auth/signin');
+      return;
+    }
     if (status === 'authenticated') {
+      // Seuls ADMIN et COORDINATOR peuvent accéder
+      if (!['ADMIN', 'COORDINATOR'].includes(session?.user?.role)) {
+        router.push('/dashboard');
+        return;
+      }
       fetchRotations();
     }
-  }, [status, currentMonth, filtreStatus, filtreResponsable]);
+  }, [status, session, router, currentMonth, filtreStatus, filtreResponsable, page]);
+
+  // Réinitialiser la page quand les filtres changent
+  useEffect(() => {
+    setPage(1);
+  }, [currentMonth, filtreStatus, filtreResponsable]);
 
   const fetchRotations = async () => {
     try {
       setLoading(true);
 
-      const params = new URLSearchParams({
+      const params = {
         annee: currentMonth.getFullYear(),
-        mois: currentMonth.getMonth() + 1,
+        page,
+        limit: 10,
         includeStats: 'true'
-      });
+      };
 
       if (filtreStatus !== 'all') {
-        params.append('status', filtreStatus);
+        params.status = filtreStatus;
       }
 
       if (filtreResponsable !== 'all') {
-        params.append('responsableId', filtreResponsable);
+        params.responsableId = filtreResponsable;
       }
 
-      const response = await fetch(`/api/rotations-weekend?${params}`);
-      const data = await response.json();
+      const response = await apiClient.rotationsWeekend.getAll(params);
+      console.log('rotations weekends', response);
 
-      if (response.ok) {
-        setRotations(data.rotations);
-        setStats(data.stats);
-      } else {
-        console.error('Erreur:', data.error);
-      }
+      setRotations(response.data || response.data || []);
+      setStats(response.stats || null);
+      setPagination(response.pagination || {});
     } catch (error) {
-      console.error('Erreur fetch:', error);
+      console.error('Erreur API rotations-weekend:', error);
+      setRotations([]);
+      setPagination({});
     } finally {
       setLoading(false);
     }
   };
 
-  const handleGenererRotations = async () => {
-    if (!confirm('Générer les rotations pour les 12 prochaines semaines ?')) {
-      return;
-    }
+  const handleGenererRotations = () => {
+    setConfirmModal({
+      isOpen: true,
+      type: 'confirm',
+      title: 'Générer les rotations',
+      message: 'Voulez-vous générer les rotations pour les 12 prochaines semaines ?',
+      onConfirm: async () => {
+        setConfirmModal(prev => ({ ...prev, isOpen: false }));
+        try {
+          const data = await apiClient.rotationsWeekend.generate({
+            nbSemaines: 12,
+            dateDebut: new Date().toISOString()
+          });
 
-    try {
-      const response = await fetch('/api/rotations-weekend', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          nbSemaines: 12,
-          dateDebut: new Date()
-        })
-      });
-
-      const data = await response.json();
-
-      if (response.ok) {
-        alert(`${data.rotations.length} rotations générées avec succès !`);
-        fetchRotations();
-      } else {
-        alert(`Erreur: ${data.error}`);
+          setAlertModal({
+            isOpen: true,
+            type: 'success',
+            title: 'Rotations générées',
+            message: `${data.rotations?.length || data.total} rotations ont été générées avec succès !`
+          });
+          fetchRotations();
+        } catch (error) {
+          console.error('Erreur génération:', error);
+          setAlertModal({
+            isOpen: true,
+            type: 'error',
+            title: 'Erreur',
+            message: error.message || 'Erreur lors de la génération'
+          });
+        }
       }
-    } catch (error) {
-      console.error('Erreur génération:', error);
-      alert('Erreur lors de la génération');
-    }
+    });
   };
 
   const previousMonth = () => {
@@ -179,7 +203,7 @@ export default function RotationsWeekendPage() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-gray-600">Total Weekends</p>
-                  <p className="text-2xl font-bold text-gray-900">{stats.totalWeekends}</p>
+                  <p className="text-2xl font-bold text-gray-900">{stats.totalWeekends || stats.total || 0}</p>
                 </div>
                 <Calendar className="w-10 h-10 text-blue-600" />
               </div>
@@ -189,8 +213,8 @@ export default function RotationsWeekendPage() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-gray-600">Terminés</p>
-                  <p className="text-2xl font-bold text-green-600">{stats.weekendsTermines}</p>
-                  <p className="text-xs text-gray-500">{stats.tauxCompletion}% taux</p>
+                  <p className="text-2xl font-bold text-green-600">{stats.weekendsTermines || stats.termines || 0}</p>
+                  <p className="text-xs text-gray-500">{stats.tauxCompletion || 0}% taux</p>
                 </div>
                 <CheckCircle className="w-10 h-10 text-green-600" />
               </div>
@@ -200,8 +224,8 @@ export default function RotationsWeekendPage() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-gray-600">Absences</p>
-                  <p className="text-2xl font-bold text-red-600">{stats.weekendsAbsences}</p>
-                  <p className="text-xs text-gray-500">{stats.tauxAbsence}% taux</p>
+                  <p className="text-2xl font-bold text-red-600">{stats.weekendsAbsences || stats.absences || 0}</p>
+                  <p className="text-xs text-gray-500">{stats.tauxAbsence || 0}% taux</p>
                 </div>
                 <UserX className="w-10 h-10 text-red-600" />
               </div>
@@ -211,10 +235,10 @@ export default function RotationsWeekendPage() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-gray-600">Satisfaction</p>
-                  <p className="text-2xl font-bold text-yellow-600">
-                    {stats.moyenneSatisfaction ? `${stats.moyenneSatisfaction}/5` : 'N/A'}
-                  </p>
                   <p className="text-xs text-gray-500">Moyenne</p>
+                  <p className="text-2xl font-bold text-yellow-600">
+                    {stats.moyenneSatisfaction || (stats.weekendsTermines ? `${stats.weekendsTermines}/${stats.totalWeekends}` : '0')}
+                  </p>
                 </div>
                 <TrendingUp className="w-10 h-10 text-yellow-600" />
               </div>
@@ -375,36 +399,83 @@ export default function RotationsWeekendPage() {
               </tbody>
             </table>
           </div>
+
+          {/* Pagination */}
+          {pagination.total > 0 && (
+            <div className="bg-gray-50 px-4 py-3 flex items-center justify-between border-t border-gray-200">
+              <div className="flex-1 flex justify-between sm:hidden">
+                <button
+                  onClick={() => setPage(page - 1)}
+                  disabled={page === 1}
+                  className="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
+                >
+                  Précédent
+                </button>
+                <button
+                  onClick={() => setPage(page + 1)}
+                  disabled={page === pagination.pages}
+                  className="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
+                >
+                  Suivant
+                </button>
+              </div>
+              <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-sm text-gray-700">
+                    Affichage <span className="font-medium">{((page - 1) * (pagination.limit || 10)) + 1}</span> à{' '}
+                    <span className="font-medium">{Math.min(page * (pagination.limit || 10), pagination.total)}</span> sur{' '}
+                    <span className="font-medium">{pagination.total}</span> résultats
+                  </p>
+                </div>
+                <div>
+                  <nav className="relative z-0 inline-flex rounded-md shadow-sm -space-x-px">
+                    <button
+                      onClick={() => setPage(page - 1)}
+                      disabled={page === 1}
+                      className="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50"
+                    >
+                      <ChevronLeft className="h-5 w-5" />
+                    </button>
+                    <span className="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-700">
+                      Page {page} sur {pagination.pages}
+                    </span>
+                    <button
+                      onClick={() => setPage(page + 1)}
+                      disabled={page === pagination.pages}
+                      className="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50"
+                    >
+                      <ChevronRight className="h-5 w-5" />
+                    </button>
+                  </nav>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
+
+      {/* Modal de confirmation */}
+      <ConfirmModal
+        isOpen={confirmModal.isOpen}
+        onClose={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
+        onConfirm={confirmModal.onConfirm}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        type={confirmModal.type}
+        confirmText="Générer"
+        cancelText="Annuler"
+      />
+
+      {/* Modal d'alerte/notification */}
+      <ConfirmModal
+        isOpen={alertModal.isOpen}
+        onClose={() => setAlertModal(prev => ({ ...prev, isOpen: false }))}
+        title={alertModal.title}
+        message={alertModal.message}
+        type={alertModal.type}
+        confirmText="OK"
+        showCancel={false}
+      />
     </Layout>
   );
-}
-
-// Protection côté serveur
-export async function getServerSideProps(context) {
-  const session = await getServerSession(context.req, context.res, authOptions);
-
-  if (!session) {
-    return {
-      redirect: {
-        destination: '/auth/signin',
-        permanent: false,
-      },
-    };
-  }
-
-  // Seuls ADMIN et COORDINATOR peuvent accéder
-  if (!['ADMIN', 'COORDINATOR'].includes(session.user.role)) {
-    return {
-      redirect: {
-        destination: '/dashboard',
-        permanent: false,
-      },
-    };
-  }
-
-  return {
-    props: {},
-  };
 }

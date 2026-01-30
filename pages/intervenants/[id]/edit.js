@@ -2,10 +2,9 @@
 import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/router';
-import { getServerSession } from 'next-auth/next';
-import { authOptions } from '../../api/auth/[...nextauth]';
 import Layout from '../../../components/layout';
 import { ArrowLeft, Save, Loader2 } from 'lucide-react';
+import apiClient from '../../../lib/api-client';
 
 export default function EditIntervenant() {
   const { data: session, status } = useSession();
@@ -32,34 +31,41 @@ export default function EditIntervenant() {
   useEffect(() => {
     if (status === 'unauthenticated') {
       router.push('/auth/signin');
-    } else if (status === 'authenticated' && id) {
-      fetchIntervenant();
+    } else if (status === 'authenticated') {
+      // Bloquer l'accès aux TEACHER (intervenants)
+      if (session?.user?.role === 'TEACHER') {
+        router.push('/intervenant/mes-seances');
+        return;
+      }
+      if (id) {
+        fetchIntervenant();
+      }
     }
-  }, [status, id]);
+  }, [status, session, id]);
 
   const fetchIntervenant = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`/api/intervenants/${id}`);
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Erreur lors du chargement');
+      if (session?.accessToken) {
+        apiClient.setToken(session.accessToken);
       }
 
+      const data = await apiClient.intervenants.getById(id);
+      const intervenant = data.intervenant || data;
+
       setFormData({
-        civilite: data.intervenant.civilite,
-        nom: data.intervenant.nom,
-        prenom: data.intervenant.prenom,
-        email: data.intervenant.email,
-        telephone: data.intervenant.telephone || '',
-        grade: data.intervenant.grade || '',
-        specialite: data.intervenant.specialite || '',
-        etablissement: data.intervenant.etablissement || '',
-        disponible: data.intervenant.disponible
+        civilite: intervenant.civilite,
+        nom: intervenant.nom,
+        prenom: intervenant.prenom,
+        email: intervenant.email,
+        telephone: intervenant.telephone || '',
+        grade: intervenant.grade || '',
+        specialite: intervenant.specialite || '',
+        etablissement: intervenant.etablissement || '',
+        disponible: intervenant.disponible
       });
     } catch (err) {
-      setError(err.message);
+      setError(err.message || 'Erreur lors du chargement');
     } finally {
       setLoading(false);
     }
@@ -85,29 +91,18 @@ export default function EditIntervenant() {
       setError(null);
       setErrors({});
 
-      const response = await fetch(`/api/intervenants/${id}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(formData)
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        if (data.errors) {
-          setErrors(data.errors);
-        } else {
-          throw new Error(data.error || 'Erreur lors de la mise à jour');
-        }
-        return;
+      if (session?.accessToken) {
+        apiClient.setToken(session.accessToken);
       }
 
-      // Redirect to detail page
+      await apiClient.intervenants.update(id, formData);
       router.push(`/intervenants/${id}`);
     } catch (err) {
-      setError(err.message);
+      if (err.errors) {
+        setErrors(err.errors);
+      } else {
+        setError(err.message || 'Erreur lors de la mise à jour');
+      }
     } finally {
       setSubmitting(false);
     }
@@ -347,34 +342,4 @@ export default function EditIntervenant() {
       </div>
     </Layout>
   );
-}
-
-// Vérification côté serveur pour bloquer l'accès aux TEACHER
-export async function getServerSideProps(context) {
-  const session = await getServerSession(context.req, context.res, authOptions);
-
-  // Rediriger si non authentifié
-  if (!session) {
-    return {
-      redirect: {
-        destination: '/auth/signin',
-        permanent: false,
-      },
-    };
-  }
-
-  // Bloquer l'accès aux TEACHER (intervenants)
-  if (session.user.role === 'TEACHER') {
-    return {
-      redirect: {
-        destination: '/intervenant/mes-seances',
-        permanent: false,
-      },
-    };
-  }
-
-  // Autoriser l'accès aux ADMIN et COORDINATOR
-  return {
-    props: {},
-  };
 }

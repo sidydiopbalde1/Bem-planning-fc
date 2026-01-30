@@ -11,10 +11,10 @@ import {
   TrendingDown,
   Users,
   Award,
-  AlertCircle,
-  ChevronLeft,
-  ChevronRight
+  AlertCircle
 } from 'lucide-react';
+import AnimatedPagination from '../../components/ui/AnimatedPagination';
+import { useTableAnimation } from '../../components/ui/AnimatedTable';
 
 export default function ResultatsEtudiants() {
   const { data: session, status } = useSession();
@@ -25,12 +25,8 @@ export default function ResultatsEtudiants() {
   const [modules, setModules] = useState([]);
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState(null);
-  const [pagination, setPagination] = useState({
-    page: 1,
-    limit: 50,
-    total: 0,
-    totalPages: 0
-  });
+  const [page, setPage] = useState(1);
+  const [pagination, setPagination] = useState(null);
 
   // Filtres
   const [filtres, setFiltres] = useState({
@@ -51,7 +47,12 @@ export default function ResultatsEtudiants() {
       chargerProgrammes();
       chargerResultats();
     }
-  }, [status, filtres, pagination.page]);
+  }, [status, filtres, page]);
+
+  // Reset page when filters change
+  useEffect(() => {
+    setPage(1);
+  }, [filtres]);
 
   const chargerProgrammes = async () => {
     try {
@@ -82,8 +83,8 @@ export default function ResultatsEtudiants() {
     setLoading(true);
     try {
       const params = new URLSearchParams();
-      params.append('page', pagination.page);
-      params.append('limit', pagination.limit);
+      params.append('page', page);
+      params.append('limit', 50);
 
       if (filtres.programmeId) params.append('programmeId', filtres.programmeId);
       if (filtres.moduleId) params.append('moduleId', filtres.moduleId);
@@ -96,11 +97,12 @@ export default function ResultatsEtudiants() {
       setResultats(data.resultats || []);
       setStats(data.stats || null);
       if (data.pagination) {
-        setPagination(prev => ({
-          ...prev,
+        setPagination({
+          page: data.pagination.page,
+          limit: data.pagination.limit,
           total: data.pagination.total,
-          totalPages: data.pagination.totalPages
-        }));
+          pages: data.pagination.totalPages || data.pagination.pages
+        });
       }
     } catch (error) {
       console.error('Erreur chargement résultats:', error);
@@ -109,9 +111,13 @@ export default function ResultatsEtudiants() {
     }
   };
 
+  const handlePageChange = (newPage) => {
+    setPage(newPage);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   const handleFiltreChange = (key, value) => {
     setFiltres(prev => ({ ...prev, [key]: value }));
-    setPagination(prev => ({ ...prev, page: 1 }));
 
     if (key === 'programmeId') {
       chargerModules(value);
@@ -167,7 +173,10 @@ export default function ResultatsEtudiants() {
     a.click();
   };
 
-  if (status === 'loading' || loading) {
+  // Hook pour les animations du tableau
+  const { animatedData, isAnimating, getRowAnimation } = useTableAnimation(resultats, page);
+
+  if (status === 'loading' || (loading && resultats.length === 0)) {
     return (
       <Layout>
         <div className="flex items-center justify-center h-96">
@@ -326,7 +335,7 @@ export default function ResultatsEtudiants() {
         {/* Actions */}
         <div className="flex justify-between items-center mb-6">
           <p className="text-sm text-gray-600">
-            {pagination.total} résultat{pagination.total > 1 ? 's' : ''} trouvé{pagination.total > 1 ? 's' : ''}
+            {pagination?.total || 0} résultat{(pagination?.total || 0) > 1 ? 's' : ''} trouvé{(pagination?.total || 0) > 1 ? 's' : ''}
           </p>
           <button
             onClick={exporterResultats}
@@ -339,172 +348,139 @@ export default function ResultatsEtudiants() {
         </div>
 
         {/* Tableau */}
-        <div className="bg-white rounded-lg shadow overflow-hidden">
-          {resultats.length === 0 ? (
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden relative">
+          {/* Loading overlay */}
+          {loading && resultats.length > 0 && (
+            <div className="absolute inset-0 bg-white/80 dark:bg-gray-900/80 backdrop-blur-sm z-30 flex items-center justify-center">
+              <div className="flex flex-col items-center space-y-3">
+                <div className="w-10 h-10 border-4 border-blue-200 rounded-full animate-spin border-t-blue-600" />
+                <span className="text-sm text-gray-600 dark:text-gray-400">Chargement...</span>
+              </div>
+            </div>
+          )}
+
+          {animatedData.length === 0 ? (
             <div className="text-center py-12">
-              <FileText className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-              <p className="text-gray-600">Aucun résultat trouvé</p>
+              <FileText className="h-12 w-12 text-gray-400 mx-auto mb-4 animate-pulse" />
+              <p className="text-gray-600 dark:text-gray-400">Aucun resultat trouve</p>
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
+              <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                <thead className="bg-gray-50 dark:bg-gray-900">
                   <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Étudiant
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                      Etudiant
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                       Programme
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                       Module
                     </th>
-                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                       CC
                     </th>
-                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                       Examen
                     </th>
-                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                       Finale
                     </th>
-                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                       Mention
                     </th>
-                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Présence
+                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                      Presence
                     </th>
-                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                       Statut
                     </th>
                   </tr>
                 </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {resultats.map((resultat) => (
-                    <tr key={resultat.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div>
-                          <div className="text-sm font-medium text-gray-900">
-                            {resultat.nomEtudiant} {resultat.prenomEtudiant}
+                <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                  {animatedData.map((resultat, index) => {
+                    const rowAnim = getRowAnimation(index);
+                    return (
+                      <tr
+                        key={resultat.id}
+                        className={`hover:bg-gray-50 dark:hover:bg-gray-700/50 ${rowAnim.className}`}
+                        style={rowAnim.style}
+                      >
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div>
+                            <div className="text-sm font-medium text-gray-900 dark:text-white">
+                              {resultat.nomEtudiant} {resultat.prenomEtudiant}
+                            </div>
+                            <div className="text-sm text-gray-500 dark:text-gray-400">
+                              {resultat.numeroEtudiant}
+                            </div>
                           </div>
-                          <div className="text-sm text-gray-500">
-                            {resultat.numeroEtudiant}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm text-gray-900 dark:text-white">
+                            {resultat.module?.programme?.code}
                           </div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900">
-                          {resultat.module?.programme?.code}
-                        </div>
-                        <div className="text-sm text-gray-500">
-                          {resultat.module?.programme?.niveau}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="text-sm text-gray-900">
-                          {resultat.module?.name}
-                        </div>
-                        <div className="text-sm text-gray-500">
-                          {resultat.module?.code}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-center text-sm text-gray-900">
-                        {resultat.noteCC !== null ? resultat.noteCC.toFixed(2) : '-'}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-center text-sm text-gray-900">
-                        {resultat.noteExamen !== null ? resultat.noteExamen.toFixed(2) : '-'}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-center">
-                        <span className="text-sm font-bold text-gray-900">
-                          {resultat.noteFinale !== null ? resultat.noteFinale.toFixed(2) : '-'}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-center">
-                        {resultat.mention ? (
-                          <span className={`px-2 py-1 text-xs font-semibold rounded-full ${getMentionBadge(resultat.mention)}`}>
-                            {resultat.mention}
+                          <div className="text-sm text-gray-500 dark:text-gray-400">
+                            {resultat.module?.programme?.niveau}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="text-sm text-gray-900 dark:text-white">
+                            {resultat.module?.name}
+                          </div>
+                          <div className="text-sm text-gray-500 dark:text-gray-400">
+                            {resultat.module?.code}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-center text-sm text-gray-900 dark:text-white">
+                          {resultat.noteCC !== null ? resultat.noteCC.toFixed(2) : '-'}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-center text-sm text-gray-900 dark:text-white">
+                          {resultat.noteExamen !== null ? resultat.noteExamen.toFixed(2) : '-'}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-center">
+                          <span className="text-sm font-bold text-gray-900 dark:text-white">
+                            {resultat.noteFinale !== null ? resultat.noteFinale.toFixed(2) : '-'}
                           </span>
-                        ) : (
-                          <span className="text-sm text-gray-400">-</span>
-                        )}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-center">
-                        <div className="text-sm text-gray-900">
-                          {resultat.tauxPresence !== null ? `${resultat.tauxPresence.toFixed(0)}%` : '-'}
-                        </div>
-                        <div className="text-xs text-gray-500">
-                          {resultat.presences}/{resultat.presences + resultat.absences}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-center">
-                        <span className={`px-2 py-1 text-xs font-semibold rounded-full ${getStatutBadge(resultat.statut)}`}>
-                          {resultat.statut}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-center">
+                          {resultat.mention ? (
+                            <span className={`px-2 py-1 text-xs font-semibold rounded-full transition-all duration-300 ${getMentionBadge(resultat.mention)}`}>
+                              {resultat.mention}
+                            </span>
+                          ) : (
+                            <span className="text-sm text-gray-400">-</span>
+                          )}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-center">
+                          <div className="text-sm text-gray-900 dark:text-white">
+                            {resultat.tauxPresence !== null ? `${resultat.tauxPresence.toFixed(0)}%` : '-'}
+                          </div>
+                          <div className="text-xs text-gray-500 dark:text-gray-400">
+                            {resultat.presences}/{resultat.presences + resultat.absences}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-center">
+                          <span className={`px-2 py-1 text-xs font-semibold rounded-full transition-all duration-300 ${getStatutBadge(resultat.statut)}`}>
+                            {resultat.statut}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
           )}
 
-          {/* Pagination */}
-          {pagination.totalPages > 1 && (
-            <div className="bg-white px-4 py-3 flex items-center justify-between border-t border-gray-200 sm:px-6">
-              <div className="flex-1 flex justify-between sm:hidden">
-                <button
-                  onClick={() => setPagination(prev => ({ ...prev, page: prev.page - 1 }))}
-                  disabled={pagination.page === 1}
-                  className="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:bg-gray-100 disabled:cursor-not-allowed"
-                >
-                  Précédent
-                </button>
-                <button
-                  onClick={() => setPagination(prev => ({ ...prev, page: prev.page + 1 }))}
-                  disabled={pagination.page === pagination.totalPages}
-                  className="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:bg-gray-100 disabled:cursor-not-allowed"
-                >
-                  Suivant
-                </button>
-              </div>
-              <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
-                <div>
-                  <p className="text-sm text-gray-700">
-                    Affichage de{' '}
-                    <span className="font-medium">
-                      {(pagination.page - 1) * pagination.limit + 1}
-                    </span>{' '}
-                    à{' '}
-                    <span className="font-medium">
-                      {Math.min(pagination.page * pagination.limit, pagination.total)}
-                    </span>{' '}
-                    sur{' '}
-                    <span className="font-medium">{pagination.total}</span> résultats
-                  </p>
-                </div>
-                <div>
-                  <nav className="relative z-0 inline-flex rounded-md shadow-sm -space-x-px">
-                    <button
-                      onClick={() => setPagination(prev => ({ ...prev, page: prev.page - 1 }))}
-                      disabled={pagination.page === 1}
-                      className="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:bg-gray-100 disabled:cursor-not-allowed"
-                    >
-                      <ChevronLeft className="h-5 w-5" />
-                    </button>
-                    <span className="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-700">
-                      Page {pagination.page} sur {pagination.totalPages}
-                    </span>
-                    <button
-                      onClick={() => setPagination(prev => ({ ...prev, page: prev.page + 1 }))}
-                      disabled={pagination.page === pagination.totalPages}
-                      className="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:bg-gray-100 disabled:cursor-not-allowed"
-                    >
-                      <ChevronRight className="h-5 w-5" />
-                    </button>
-                  </nav>
-                </div>
-              </div>
-            </div>
+          {/* Pagination animee */}
+          {pagination && pagination.pages > 1 && (
+            <AnimatedPagination
+              pagination={pagination}
+              currentPage={page}
+              onPageChange={handlePageChange}
+            />
           )}
         </div>
       </div>

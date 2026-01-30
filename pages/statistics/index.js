@@ -6,6 +6,7 @@ import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/router';
 import Layout from '../../components/layout';
 import StatisticsPanel from '../../components/statistics/StatisticsPanel';
+import apiClient from '../../lib/api-client';
 import {
   BarChart3,
   Users,
@@ -51,8 +52,7 @@ export default function StatisticsPage() {
 
   const handleExport = async () => {
     try {
-      const response = await fetch(`/api/statistics?type=${activeType}`);
-      const data = await response.json();
+      const data = await apiClient.statistics.getAll({ type: activeType });
 
       // Creer le fichier JSON a telecharger
       const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -65,7 +65,7 @@ export default function StatisticsPage() {
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
     } catch (error) {
-      console.error('Erreur export:', error);
+      console.error('Erreur export:', error.message || error);
     }
   };
 

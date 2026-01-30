@@ -3,9 +3,10 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import { useSession } from 'next-auth/react';
 import Layout from '../../components/layout';
+import apiClient from '../../lib/api-client';
 import {
   BookOpen, Clock, TrendingUp, AlertTriangle, User, CheckCircle, Calendar,
-  BarChart3, Activity, FileText, Play, Pause, XCircle, Layers, Edit
+  BarChart3, Activity, FileText, Play, Pause, XCircle, Layers, Edit as EditIcon
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -33,15 +34,11 @@ export default function CoordinateurDashboard() {
   const fetchDashboardData = async () => {
     try {
       setLoading(true);
-      const response = await fetch('/api/coordinateur/dashboard');
-      if (response.ok) {
-        const dashboardData = await response.json();
-        setData(dashboardData);
-      } else {
-        setError('Erreur lors du chargement du tableau de bord');
-      }
+      const dashboardData = await apiClient.coordinateur.getDashboard();
+      console.log('Données du dashboard',dashboardData);
+      setData(dashboardData);
     } catch (error) {
-      setError('Erreur de connexion au serveur');
+      setError(error.message || 'Erreur de connexion au serveur');
     } finally {
       setLoading(false);
     }
@@ -194,12 +191,12 @@ export default function CoordinateurDashboard() {
             <div className="mt-3 pt-3 border-t border-purple-400">
               <div className="space-y-1 text-sm">
                 <div className="flex justify-between">
-                  <span>CM: {data.vhtParType.CM}h</span>
-                  <span>TD: {data.vhtParType.TD}h</span>
+                  <span>CM: {data.vhtParType?.CM || 0}h</span>
+                  <span>TD: {data.vhtParType?.TD || 0}h</span>
                 </div>
                 <div className="flex justify-between">
-                  <span>TP: {data.vhtParType.TP}h</span>
-                  <span>TPE: {data.vhtParType.TPE}h</span>
+                  <span>TP: {data.vhtParType?.TP || 0}h</span>
+                  <span>TPE: {data.vhtParType?.TPE || 0}h</span>
                 </div>
               </div>
             </div>
@@ -237,17 +234,17 @@ export default function CoordinateurDashboard() {
         </div>
 
         {/* Alerts Section */}
-        {(data.programmesEnRetard.length > 0 || data.modulesSansIntervenant.length > 0) && (
+        {(data.programmesEnRetard?.length > 0 || data.modulesSansIntervenant?.length > 0) && (
           <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded-lg">
             <div className="flex items-center mb-3">
               <AlertTriangle className="w-5 h-5 text-yellow-600 mr-2" />
               <h3 className="font-semibold text-yellow-900">Alertes et actions requises</h3>
             </div>
             <div className="space-y-2 text-sm text-yellow-800">
-              {data.programmesEnRetard.length > 0 && (
+              {data.programmesEnRetard?.length > 0 && (
                 <p>• {data.programmesEnRetard.length} programme(s) en retard</p>
               )}
-              {data.modulesSansIntervenant.length > 0 && (
+              {data.modulesSansIntervenant?.length > 0 && (
                 <p>• {data.modulesSansIntervenant.length} module(s) sans intervenant</p>
               )}
             </div>
@@ -256,7 +253,7 @@ export default function CoordinateurDashboard() {
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Programmes en retard */}
-          {data.programmesEnRetard.length > 0 && (
+          {data.programmesEnRetard?.length > 0 && (
             <div className="bg-white rounded-lg shadow p-6">
               <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center">
                 <AlertTriangle className="w-5 h-5 text-red-500 mr-2" />
@@ -284,7 +281,7 @@ export default function CoordinateurDashboard() {
           )}
 
           {/* Modules sans intervenant */}
-          {data.modulesSansIntervenant.length > 0 && (
+          {data.modulesSansIntervenant?.length > 0 && (
             <div className="bg-white rounded-lg shadow p-6">
               <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center">
                 <User className="w-5 h-5 text-orange-500 mr-2" />
@@ -317,7 +314,7 @@ export default function CoordinateurDashboard() {
           )}
 
           {/* Modules à venir */}
-          {data.modulesProchains.length > 0 && (
+          {data.modulesProchains?.length > 0 && (
             <div className="bg-white rounded-lg shadow p-6">
               <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center">
                 <Calendar className="w-5 h-5 text-blue-500 mr-2" />
@@ -360,12 +357,12 @@ export default function CoordinateurDashboard() {
               Activité récente
             </h3>
             <div className="space-y-3">
-              {data.recentActivity.length > 0 ? (
+              {data.recentActivity?.length > 0 ? (
                 data.recentActivity.map((activity) => (
                   <div key={activity.id} className="flex items-start space-x-3 p-2 hover:bg-gray-50 rounded">
                     <div className={`mt-1 ${getActionColor(activity.action)}`}>
                       {activity.action === 'CREATION' && <Play className="w-4 h-4" />}
-                      {activity.action === 'MODIFICATION' && <Edit className="w-4 h-4" />}
+                      {activity.action === 'MODIFICATION' && <EditIcon className="w-4 h-4" />}
                       {activity.action === 'SUPPRESSION' && <XCircle className="w-4 h-4" />}
                     </div>
                     <div className="flex-1 min-w-0">
@@ -386,7 +383,7 @@ export default function CoordinateurDashboard() {
         </div>
 
         {/* Progression by Programme */}
-        {data.progressionParProgramme.length > 0 && (
+        {data.progressionParProgramme?.length > 0 && (
           <div className="bg-white rounded-lg shadow p-6">
             <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center">
               <BarChart3 className="w-5 h-5 text-gray-500 mr-2" />

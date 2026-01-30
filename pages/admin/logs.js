@@ -9,6 +9,7 @@ import {
   FileText, Search, Filter, ChevronLeft, ChevronRight,
   Activity, User, Calendar, Database, Eye
 } from 'lucide-react';
+import apiClient from '../../lib/api-client';
 
 export default function LogsManagement() {
   const { data: session, status } = useSession();
@@ -52,25 +53,22 @@ export default function LogsManagement() {
   const fetchLogs = async () => {
     try {
       setLoading(true);
-      const params = new URLSearchParams();
-      if (debouncedSearchTerm) params.append('search', debouncedSearchTerm);
-      if (actionFilter) params.append('action', actionFilter);
-      if (entiteFilter) params.append('entite', entiteFilter);
-      if (dateDebut) params.append('dateDebut', dateDebut);
-      if (dateFin) params.append('dateFin', dateFin);
-      params.append('page', page);
-      params.append('limit', '50');
-
-      const response = await fetch(`/api/admin/logs?${params}`);
-      const data = await response.json();
-
-      if (response.ok) {
-        setLogs(data.logs);
-        setStats(data.stats);
-        setPagination(data.pagination);
-      } else {
-        console.error('Erreur:', data.error);
+      if (session?.accessToken) {
+        apiClient.setToken(session.accessToken);
       }
+
+      const params = { page, limit: 10 };
+      if (debouncedSearchTerm) params.search = debouncedSearchTerm;
+      if (actionFilter) params.action = actionFilter;
+      if (entiteFilter) params.entite = entiteFilter;
+      if (dateDebut) params.dateDebut = dateDebut;
+      if (dateFin) params.dateFin = dateFin;
+
+      const data = await apiClient.admin.getLogs(params);
+      console.log('Données des logs:', data);
+      setLogs(data.logs || []);
+      setStats(data.stats || {});
+      setPagination(data.pagination || {});
     } catch (error) {
       console.error('Erreur lors du chargement des logs:', error);
     } finally {
@@ -355,7 +353,7 @@ export default function LogsManagement() {
               </div>
 
               {/* Pagination */}
-              {pagination.totalPages > 1 && (
+              {pagination.total > 0 && (
                 <div className="bg-gray-50 dark:bg-gray-900 px-4 py-3 flex items-center justify-between border-t border-gray-200 dark:border-gray-700">
                   <div className="flex-1 flex justify-between sm:hidden">
                     <button
@@ -367,7 +365,7 @@ export default function LogsManagement() {
                     </button>
                     <button
                       onClick={() => setPage(page + 1)}
-                      disabled={page === pagination.totalPages}
+                      disabled={page === pagination.pages}
                       className="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
                     >
                       Suivant
@@ -391,11 +389,11 @@ export default function LogsManagement() {
                           <ChevronLeft className="h-5 w-5" />
                         </button>
                         <span className="relative inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-sm font-medium text-gray-700 dark:text-gray-300">
-                          Page {page} sur {pagination.totalPages}
+                          Page {page} sur {pagination.pages}
                         </span>
                         <button
                           onClick={() => setPage(page + 1)}
-                          disabled={page === pagination.totalPages}
+                          disabled={page === pagination.pages}
                           className="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-sm font-medium text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-600 disabled:opacity-50"
                         >
                           <ChevronRight className="h-5 w-5" />

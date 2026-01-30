@@ -3,8 +3,9 @@ import { useSession, getSession } from 'next-auth/react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
 import Layout from '../../components/layout.js';
-import { BookOpen, Plus, Edit, Trash2, Users, Calendar, TrendingUp, Download } from 'lucide-react';
+import { BookOpen, Plus, Edit as EditIcon, Trash2, Users, Calendar, TrendingUp, Download } from 'lucide-react';
 import { FadeIn, SlideIn } from '../../components/ui/PageTransition.js';
+import apiClient from '../../lib/api-client';
 
 export default function MaquettePedagogique({ initialProgrammes }) {
   const { data: session, status } = useSession();
@@ -37,16 +38,18 @@ export default function MaquettePedagogique({ initialProgrammes }) {
   const fetchModules = async () => {
     setLoading(true);
     try {
-      const response = await fetch(`/api/modules?programmeId=${selectedProgramme}`);
-      if (response.ok) {
-        const data = await response.json();
-        setModules(data);
-
-        // Charger les résultats et évaluations pour chaque module
-        data.forEach(module => {
-          fetchModuleData(module.id);
-        });
+      if (session?.accessToken) {
+        apiClient.setToken(session.accessToken);
       }
+
+      const data = await apiClient.modules.getAll({ programmeId: selectedProgramme });
+      const modulesData = data.data || data || [];
+      setModules(modulesData);
+
+      // Charger les résultats et évaluations pour chaque module
+      modulesData.forEach(module => {
+        fetchModuleData(module.id);
+      });
     } catch (error) {
       console.error('Erreur lors du chargement des modules:', error);
     } finally {
@@ -56,20 +59,17 @@ export default function MaquettePedagogique({ initialProgrammes }) {
 
   const fetchModuleData = async (moduleId) => {
     try {
-      const [resultatsRes, evaluationsRes] = await Promise.all([
-        fetch(`/api/resultats-etudiants?moduleId=${moduleId}`),
-        fetch(`/api/evaluations-enseignements?moduleId=${moduleId}`)
+      if (session?.accessToken) {
+        apiClient.setToken(session.accessToken);
+      }
+
+      const [resultatsData, evaluationsData] = await Promise.all([
+        apiClient.resultatsEtudiants.getAll({ moduleId }),
+        apiClient.evaluationsEnseignements.getAll({ moduleId })
       ]);
 
-      if (resultatsRes.ok) {
-        const data = await resultatsRes.json();
-        setResultats(prev => ({ ...prev, [moduleId]: data }));
-      }
-
-      if (evaluationsRes.ok) {
-        const data = await evaluationsRes.json();
-        setEvaluations(prev => ({ ...prev, [moduleId]: data[0] })); // Prendre la première évaluation
-      }
+      setResultats(prev => ({ ...prev, [moduleId]: resultatsData || [] }));
+      setEvaluations(prev => ({ ...prev, [moduleId]: (evaluationsData || [])[0] })); // Prendre la première évaluation
     } catch (error) {
       console.error('Erreur lors du chargement des données du module:', error);
     }
@@ -403,57 +403,40 @@ function ManageModuleModal({ isOpen, onClose, module, formType, resultats, evalu
   const handleAddResultat = async (e) => {
     e.preventDefault();
     try {
-      const response = await fetch('/api/resultats-etudiants', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...formData,
-          moduleId: module.id
-        })
+      await apiClient.resultatsEtudiants.create({
+        ...formData,
+        moduleId: module.id
       });
 
-      if (response.ok) {
-        setShowAddForm(false);
-        setFormData({});
-        onDataUpdated();
-      } else {
-        const error = await response.json();
-        alert(`Erreur: ${error.error}`);
-      }
+      setShowAddForm(false);
+      setFormData({});
+      onDataUpdated();
     } catch (error) {
       console.error('Erreur:', error);
-      alert('Erreur lors de l\'ajout');
+      alert(`Erreur: ${error.message || 'Erreur lors de l\'ajout'}`);
     }
   };
 
   const handleUpdateEvaluation = async (e) => {
     e.preventDefault();
     try {
-      const method = evaluation ? 'PUT' : 'POST';
-      const url = evaluation
-        ? `/api/evaluations-enseignements/${evaluation.id}`
-        : '/api/evaluations-enseignements';
+      const dataToSend = {
+        ...formData,
+        moduleId: module.id,
+        intervenantId: module.intervenantId || formData.intervenantId
+      };
 
-      const response = await fetch(url, {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...formData,
-          moduleId: module.id,
-          intervenantId: module.intervenantId || formData.intervenantId
-        })
-      });
-
-      if (response.ok) {
-        onDataUpdated();
-        alert('Évaluation enregistrée avec succès');
+      if (evaluation) {
+        await apiClient.evaluationsEnseignements.update(evaluation.id, dataToSend);
       } else {
-        const error = await response.json();
-        alert(`Erreur: ${error.error}`);
+        await apiClient.evaluationsEnseignements.create(dataToSend);
       }
+
+      onDataUpdated();
+      alert('Évaluation enregistrée avec succès');
     } catch (error) {
       console.error('Erreur:', error);
-      alert('Erreur lors de l\'enregistrement');
+      alert(`Erreur: ${error.message || 'Erreur lors de l\'enregistrement'}`);
     }
   };
 
@@ -735,17 +718,30 @@ export async function getServerSideProps(context) {
   }
 
   try {
-    const baseUrl = process.env.NEXTAUTH_URL || 'http://localhost:3000';
+    const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002/api';
+    const token = session.accessToken;
 
-    const programmesRes = await fetch(`${baseUrl}/api/programmes`, {
-      headers: { Cookie: context.req.headers.cookie || '' },
-    });
+    const headers = {
+      'Content-Type': 'application/json',
+      ...(token && { 'Authorization': `Bearer ${token}` }),
+    };
 
-    const programmesData = programmesRes.ok ? await programmesRes.json() : {};
+    const programmesRes = await fetch(`${apiBaseUrl}/programmes`, { headers });
+    const programmesData = programmesRes.ok ? await programmesRes.json() : { programmes: [] };
+
+    // Ensure programmes is always an array
+    let programmes = [];
+    if (Array.isArray(programmesData)) {
+      programmes = programmesData;
+    } else if (programmesData && Array.isArray(programmesData.programmes)) {
+      programmes = programmesData.programmes;
+    } else if (programmesData && Array.isArray(programmesData.data)) {
+      programmes = programmesData.data;
+    }
 
     return {
       props: {
-        initialProgrammes: programmesData.programmes || [],
+        initialProgrammes: programmes,
       },
     };
   } catch (error) {

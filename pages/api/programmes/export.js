@@ -1,5 +1,5 @@
 // pages/api/programmes/export.js
-import { getServerSession } from 'next-auth';
+import { getServerSession } from 'next-auth/next';
 import { authOptions } from '../auth/[...nextauth]';
 import { PrismaClient } from '@prisma/client';
 import xlsx from 'xlsx';

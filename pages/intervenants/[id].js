@@ -2,8 +2,6 @@
 import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/router';
-import { getServerSession } from 'next-auth/next';
-import { authOptions } from '../api/auth/[...nextauth]';
 import Layout from '../../components/layout';
 import {
   User,
@@ -15,10 +13,11 @@ import {
   Calendar,
   Clock,
   ArrowLeft,
-  Edit,
+  Edit as EditIcon,
   CheckCircle,
   XCircle
 } from 'lucide-react';
+import apiClient from '../../lib/api-client';
 
 export default function IntervenantDetail() {
   const { data: session, status } = useSession();
@@ -34,29 +33,33 @@ export default function IntervenantDetail() {
   useEffect(() => {
     if (status === 'unauthenticated') {
       router.push('/auth/signin');
-    } else if (status === 'authenticated' && id) {
-      fetchIntervenantDetails();
+    } else if (status === 'authenticated') {
+      // Bloquer l'accès aux TEACHER (intervenants)
+      if (session?.user?.role === 'TEACHER') {
+        router.push('/intervenant/mes-seances');
+        return;
+      }
+      if (id) {
+        fetchIntervenantDetails();
+      }
     }
-  }, [status, id]);
+  }, [status, session, id]);
 
   const fetchIntervenantDetails = async () => {
     try {
       setLoading(true);
       setError(null);
 
-      // Fetch intervenant details
-      const response = await fetch(`/api/intervenants/${id}`);
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Erreur lors du chargement');
+      if (session?.accessToken) {
+        apiClient.setToken(session.accessToken);
       }
 
-      setIntervenant(data.intervenant);
-      setModules(data.intervenant.modules || []);
-      setSeances(data.intervenant.seances || []);
+      const data = await apiClient.intervenants.getById(id);
+      setIntervenant(data.intervenant || data);
+      setModules(data.intervenant?.modules || data.modules || []);
+      setSeances(data.intervenant?.seances || data.seances || []);
     } catch (err) {
-      setError(err.message);
+      setError(err.message || 'Erreur lors du chargement');
     } finally {
       setLoading(false);
     }
@@ -112,7 +115,7 @@ export default function IntervenantDetail() {
             onClick={() => router.push(`/intervenants/${id}/edit`)}
             className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
           >
-            <Edit className="w-4 h-4" />
+            <EditIcon className="w-4 h-4" />
             <span>Modifier</span>
           </button>
         </div>
@@ -274,34 +277,4 @@ export default function IntervenantDetail() {
       </div>
     </Layout>
   );
-}
-
-// Vérification côté serveur pour bloquer l'accès aux TEACHER
-export async function getServerSideProps(context) {
-  const session = await getServerSession(context.req, context.res, authOptions);
-
-  // Rediriger si non authentifié
-  if (!session) {
-    return {
-      redirect: {
-        destination: '/auth/signin',
-        permanent: false,
-      },
-    };
-  }
-
-  // Bloquer l'accès aux TEACHER (intervenants)
-  if (session.user.role === 'TEACHER') {
-    return {
-      redirect: {
-        destination: '/intervenant/mes-seances',
-        permanent: false,
-      },
-    };
-  }
-
-  // Autoriser l'accès aux ADMIN et COORDINATOR
-  return {
-    props: {},
-  };
 }

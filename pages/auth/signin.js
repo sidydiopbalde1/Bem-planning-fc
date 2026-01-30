@@ -4,6 +4,7 @@ import { useRouter } from 'next/router';
 import Head from 'next/head';
 import Link from 'next/link';
 import { Calendar, Lock, Mail, ArrowRight, AlertCircle } from 'lucide-react';
+import apiClient from '../../lib/api-client';
 
 export default function SignIn({ csrfToken }) {
   const [email, setEmail] = useState('');
@@ -18,6 +19,7 @@ export default function SignIn({ csrfToken }) {
     setError('');
 
     try {
+      // 1. Login via NextAuth
       const result = await signIn('credentials', {
         email,
         password,
@@ -26,9 +28,23 @@ export default function SignIn({ csrfToken }) {
 
       if (result?.error) {
         setError('Email ou mot de passe incorrect');
-      } else {
-        router.push('/dashboard');
+        return;
       }
+
+      // 2. Login via NestJS backend pour obtenir le token JWT (non-bloquant)
+      apiClient.auth.login({ email, password }).then((backendAuth) => {
+        console.log("auth token", backendAuth.access_token);
+        
+        if (backendAuth?.access_token) {
+          localStorage.setItem('accessToken', backendAuth.access_token);
+          apiClient.setToken(backendAuth.access_token);
+        }
+      }).catch((backendErr) => {
+        console.warn('Backend auth failed, continuing with session only:', backendErr);
+      });
+
+      // Force full page reload to pick up the new session cookie
+      router.push('/dashboard');
     } catch (err) {
       setError('Une erreur est survenue');
     } finally {
@@ -177,7 +193,7 @@ export default function SignIn({ csrfToken }) {
         {/* Footer */}
         <div className="text-center">
           <p className="text-sm text-white/90 font-medium">
-            © 2024-2025 BEM Planning FC. Tous droits réservés.
+            © 2025-2026 BEM Planning FC. Tous droits réservés.
           </p>
         </div>
       </div>

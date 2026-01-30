@@ -1,10 +1,10 @@
 # BEM PLANNING - Système de Planification Académique
 
-[![Next.js](https://img.shields.io/badge/Next.js-15.5-black)](https://nextjs.org/)
-[![React](https://img.shields.io/badge/React-19.1-blue)](https://reactjs.org/)
-[![Prisma](https://img.shields.io/badge/Prisma-6.16-2D3748)](https://www.prisma.io/)
-[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-14+-336791)](https://www.postgresql.org/)
-
+  Pour le CD, ajoutez ces secrets dans Settings > Secrets :
+  - STAGING_HOST, STAGING_USER, STAGING_SSH_KEY
+  - PRODUCTION_HOST, PRODUCTION_USER, PRODUCTION_SSH_KEY
+  - SLACK_WEBHOOK_URL (optionnel)
+  
 > Gestion automatisée de l'emploi du temps et détection des conflits pour l'enseignement supérieur
 
 ---

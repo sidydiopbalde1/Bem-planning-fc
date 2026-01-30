@@ -1,27 +1,11 @@
-
 // pages/api/intervenants/index.js
-import { getServerSession } from 'next-auth/next';
 import { PrismaClient } from '@prisma/client';
-import { authOptions } from '../auth/[...nextauth]';
+import { withCoordinator } from '../../../lib/withApiHandler';
 
 const prisma = new PrismaClient();
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   try {
-    const session = await getServerSession(req, res, authOptions);
-
-    if (!session || !session.user) {
-      return res.status(401).json({ error: 'Non authentifié' });
-    }
-
-    // Vérifier que l'utilisateur n'est pas un simple intervenant (TEACHER)
-    // Seuls les ADMIN et COORDINATOR peuvent voir la liste de tous les intervenants
-    if (session.user.role === 'TEACHER') {
-      return res.status(403).json({
-        error: 'Accès refusé. Vous n\'avez pas les permissions nécessaires pour accéder à cette ressource.'
-      });
-    }
-
     if (req.method === 'GET') {
       // Récupération de tous les intervenants avec leurs modules
       const intervenants = await prisma.intervenant.findMany({
@@ -47,7 +31,7 @@ export default async function handler(req, res) {
           { prenom: 'asc' }
         ]
       });
-
+      console.log('Intervenants récupérés:', intervenants.length);
       res.status(200).json({ intervenants });
     } else {
       res.status(405).json({ error: 'Method Not Allowed' });
@@ -60,3 +44,5 @@ export default async function handler(req, res) {
     await prisma.$disconnect();
   }
 }
+
+export default withCoordinator(handler, { entity: 'Intervenant' });

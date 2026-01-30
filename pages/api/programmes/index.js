@@ -1,25 +1,21 @@
 // pages/api/programmes/index.js
 import { PrismaClient } from '@prisma/client';
-import { getSession } from 'next-auth/react';
+import { withAuth } from '../../../lib/withApiHandler';
 
 const prisma = new PrismaClient();
 
-export default async function handler(req, res) {
-  const session = await getSession({ req });
-  
-  if (!session) {
-    return res.status(401).json({ error: 'Non authentifié' });
-  }
-
+async function handler(req, res) {
   switch (req.method) {
     case 'GET':
-      return handleGET(req, res, session);
+      return handleGET(req, res, req.session);
     case 'POST':
-      return handlePOST(req, res, session);
+      return handlePOST(req, res, req.session);
     default:
       return res.status(405).json({ error: 'Méthode non autorisée' });
   }
 }
+
+export default withAuth(handler, { entity: 'Programme' });
 
 // Récupérer tous les programmes
 async function handleGET(req, res, session) {

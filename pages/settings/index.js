@@ -1,16 +1,17 @@
-// pages/settings/index.js - Version complète avec statistiques
+// pages/settings/index.js - Version complète avec statistiques et i18n
 import { useState, useEffect } from 'react';
 import { useSession, signOut } from 'next-auth/react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
 import Layout from '../../components/layout';
 import UserStats from '../../components/settings/UserStats';
-import { 
-  User, 
-  Settings as SettingsIcon, 
-  Shield, 
-  Palette, 
-  Bell, 
+import { useLanguage } from '../../contexts/LanguageContext';
+import {
+  User,
+  Settings as SettingsIcon,
+  Shield,
+  Palette,
+  Bell,
   Download,
   Trash2,
   Save,
@@ -23,10 +24,12 @@ import {
   LogOut,
   Key
 } from 'lucide-react';
+import apiClient from '../../lib/api-client';
 
 export default function SettingsPage() {
   const { data: session, status, update } = useSession();
   const router = useRouter();
+  const { t, language, setLanguage: setAppLanguage, availableLanguages } = useLanguage();
   const [activeTab, setActiveTab] = useState('profile');
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState({ type: '', text: '' });
@@ -41,9 +44,9 @@ export default function SettingsPage() {
     confirmPassword: ''
   });
   
-  // États pour les préférences
+  // États pour les préférences (language synced with context)
   const [preferences, setPreferences] = useState({
-    language: 'fr',
+    language: language || 'fr',
     timezone: 'Europe/Paris',
     dateFormat: 'dd/MM/yyyy',
     notifications: {
@@ -56,6 +59,11 @@ export default function SettingsPage() {
     theme: 'light',
     defaultView: 'month'
   });
+
+  // Sync preferences language with context language
+  useEffect(() => {
+    setPreferences(prev => ({ ...prev, language }));
+  }, [language]);
 
   const [showPasswords, setShowPasswords] = useState({
     current: false,
@@ -81,11 +89,11 @@ export default function SettingsPage() {
 
   const loadPreferences = async () => {
     try {
-      const response = await fetch('/api/user/preferences');
-      if (response.ok) {
-        const data = await response.json();
-        setPreferences(prev => ({ ...prev, ...data.preferences }));
+      if (session?.accessToken) {
+        apiClient.setToken(session.accessToken);
       }
+      const data = await apiClient.user.getPreferences();
+      setPreferences(prev => ({ ...prev, ...data.preferences }));
     } catch (error) {
       console.error('Erreur chargement préférences:', error);
     }
@@ -121,28 +129,21 @@ export default function SettingsPage() {
         updateData.newPassword = profileData.newPassword;
       }
 
-      const response = await fetch('/api/user/profile', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updateData),
-      });
-
-      const data = await response.json();
-
-      if (response.ok) {
-        await update({ name: profileData.name });
-        showMessage('success', 'Profil mis à jour avec succès');
-        
-        // Reset password fields
-        setProfileData(prev => ({
-          ...prev,
-          currentPassword: '',
-          newPassword: '',
-          confirmPassword: ''
-        }));
-      } else {
-        showMessage('error', data.error || 'Erreur lors de la mise à jour');
+      if (session?.accessToken) {
+        apiClient.setToken(session.accessToken);
       }
+
+      await apiClient.user.updateProfile(updateData);
+      await update({ name: profileData.name });
+      showMessage('success', 'Profil mis à jour avec succès');
+
+      // Reset password fields
+      setProfileData(prev => ({
+        ...prev,
+        currentPassword: '',
+        newPassword: '',
+        confirmPassword: ''
+      }));
     } catch (error) {
       showMessage('error', 'Erreur de connexion');
     } finally {
@@ -152,8 +153,13 @@ export default function SettingsPage() {
 
   const handlePreferencesUpdate = async () => {
     setLoading(true);
-    
+
     try {
+      // Mettre à jour la langue de l'application
+      if (preferences.language !== language) {
+        setAppLanguage(preferences.language);
+      }
+
       const response = await fetch('/api/user/preferences', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -161,13 +167,13 @@ export default function SettingsPage() {
       });
 
       if (response.ok) {
-        showMessage('success', 'Préférences sauvegardées');
+        showMessage('success', t('settings.preferences.saveSuccess'));
       } else {
         const data = await response.json();
-        showMessage('error', data.error || 'Erreur lors de la sauvegarde');
+        showMessage('error', data.error || t('errors.serverError'));
       }
     } catch (error) {
-      showMessage('error', 'Erreur de connexion');
+      showMessage('error', t('errors.connectionError'));
     } finally {
       setLoading(false);
     }
@@ -229,25 +235,25 @@ export default function SettingsPage() {
   }
 
   const tabs = [
-    { id: 'profile', label: 'Profil', icon: User },
-    { id: 'preferences', label: 'Préférences', icon: SettingsIcon },
-    { id: 'notifications', label: 'Notifications', icon: Bell },
-    { id: 'security', label: 'Sécurité', icon: Shield },
-    { id: 'data', label: 'Données', icon: Database }
+    { id: 'profile', label: t('settings.tabs.profile'), icon: User },
+    { id: 'preferences', label: t('settings.tabs.preferences'), icon: SettingsIcon },
+    { id: 'notifications', label: t('settings.tabs.notifications'), icon: Bell },
+    { id: 'security', label: t('settings.tabs.security'), icon: Shield },
+    { id: 'data', label: t('settings.tabs.data'), icon: Database }
   ];
 
   return (
     <Layout>
       <Head>
-        <title>Paramètres - Planning FC</title>
+        <title>{t('settings.title')} - Planning FC</title>
       </Head>
 
       <div className="space-y-6">
         {/* Header */}
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Paramètres</h1>
+          <h1 className="text-3xl font-bold text-gray-900">{t('settings.title')}</h1>
           <p className="text-gray-600 mt-1">
-            Gérez votre profil et personnalisez votre expérience
+            {t('settings.subtitle')}
           </p>
         </div>
 
@@ -300,13 +306,13 @@ export default function SettingsPage() {
             {activeTab === 'profile' && (
               <div className="space-y-6">
                 <div>
-                  <h3 className="text-lg font-semibold text-gray-900 mb-4">Informations personnelles</h3>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4">{t('settings.profile.title')}</h3>
                   
                   <form onSubmit={handleProfileUpdate} className="space-y-4">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Nom complet
+                          {t('settings.profile.fullName')}
                         </label>
                         <input
                           type="text"
@@ -316,10 +322,10 @@ export default function SettingsPage() {
                           required
                         />
                       </div>
-                      
+
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Email
+                          {t('settings.profile.email')}
                         </label>
                         <input
                           type="email"
@@ -327,16 +333,16 @@ export default function SettingsPage() {
                           className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-500"
                           disabled
                         />
-                        <p className="text-xs text-gray-500 mt-1">L'email ne peut pas être modifié</p>
+                        <p className="text-xs text-gray-500 mt-1">{t('settings.profile.emailNotEditable')}</p>
                       </div>
                     </div>
 
                     <div className="border-t pt-6">
-                      <h4 className="text-md font-medium text-gray-900 mb-4">Changer le mot de passe</h4>
+                      <h4 className="text-md font-medium text-gray-900 mb-4">{t('settings.profile.changePassword')}</h4>
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-1">
-                            Mot de passe actuel
+                            {t('settings.profile.currentPassword')}
                           </label>
                           <div className="relative">
                             <input
@@ -357,7 +363,7 @@ export default function SettingsPage() {
                         
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-1">
-                            Nouveau mot de passe
+                            {t('settings.profile.newPassword')}
                           </label>
                           <div className="relative">
                             <input
@@ -379,7 +385,7 @@ export default function SettingsPage() {
                         
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-1">
-                            Confirmer le mot de passe
+                            {t('settings.profile.confirmPassword')}
                           </label>
                           <div className="relative">
                             <input
@@ -423,29 +429,36 @@ export default function SettingsPage() {
             {activeTab === 'preferences' && (
               <div className="space-y-6">
                 <div>
-                  <h3 className="text-lg font-semibold text-gray-900 mb-4">Préférences générales</h3>
-                  
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4">{t('settings.preferences.title')}</h3>
+
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Langue
+                        {t('settings.preferences.language')}
                       </label>
                       <div className="relative">
                         <Globe className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
                         <select
                           value={preferences.language}
-                          onChange={(e) => setPreferences(prev => ({ ...prev, language: e.target.value }))}
+                          onChange={(e) => {
+                            setPreferences(prev => ({ ...prev, language: e.target.value }));
+                            // Changement immédiat de la langue
+                            setAppLanguage(e.target.value);
+                          }}
                           className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white"
                         >
-                          <option value="fr">Français</option>
-                          <option value="en">English</option>
+                          {availableLanguages.map(lang => (
+                            <option key={lang.code} value={lang.code}>
+                              {lang.name}
+                            </option>
+                          ))}
                         </select>
                       </div>
                     </div>
 
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Fuseau horaire
+                        {t('settings.preferences.timezone')}
                       </label>
                       <select
                         value={preferences.timezone}
@@ -460,7 +473,7 @@ export default function SettingsPage() {
 
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Format de date
+                        {t('settings.preferences.dateFormat')}
                       </label>
                       <select
                         value={preferences.dateFormat}
@@ -475,23 +488,23 @@ export default function SettingsPage() {
 
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Vue calendrier par défaut
+                        {t('settings.preferences.defaultView')}
                       </label>
                       <select
                         value={preferences.defaultView}
                         onChange={(e) => setPreferences(prev => ({ ...prev, defaultView: e.target.value }))}
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white"
                       >
-                        <option value="month">Mensuelle</option>
-                        <option value="week">Hebdomadaire</option>
-                        <option value="day">Journalière</option>
+                        <option value="month">{t('settings.preferences.viewMonth')}</option>
+                        <option value="week">{t('settings.preferences.viewWeek')}</option>
+                        <option value="day">{t('settings.preferences.viewDay')}</option>
                       </select>
                     </div>
                   </div>
 
                   <div className="mt-6">
                     <label className="block text-sm font-medium text-gray-700 mb-3">
-                      Thème
+                      {t('settings.preferences.theme')}
                     </label>
                     <div className="flex space-x-4">
                       <label className="flex items-center">
@@ -502,7 +515,7 @@ export default function SettingsPage() {
                           onChange={(e) => setPreferences(prev => ({ ...prev, theme: e.target.value }))}
                           className="mr-2"
                         />
-                        <span className="text-sm">Clair</span>
+                        <span className="text-sm">{t('settings.preferences.themeLight')}</span>
                       </label>
                       <label className="flex items-center">
                         <input
@@ -512,7 +525,7 @@ export default function SettingsPage() {
                           onChange={(e) => setPreferences(prev => ({ ...prev, theme: e.target.value }))}
                           className="mr-2"
                         />
-                        <span className="text-sm">Sombre</span>
+                        <span className="text-sm">{t('settings.preferences.themeDark')}</span>
                       </label>
                       <label className="flex items-center">
                         <input
@@ -522,7 +535,7 @@ export default function SettingsPage() {
                           onChange={(e) => setPreferences(prev => ({ ...prev, theme: e.target.value }))}
                           className="mr-2"
                         />
-                        <span className="text-sm">Automatique</span>
+                        <span className="text-sm">{t('settings.preferences.themeAuto')}</span>
                       </label>
                     </div>
                   </div>
@@ -538,7 +551,7 @@ export default function SettingsPage() {
                       ) : (
                         <Save className="h-4 w-4" />
                       )}
-                      <span>Sauvegarder</span>
+                      <span>{t('common.save')}</span>
                     </button>
                   </div>
                 </div>

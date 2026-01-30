@@ -11,6 +11,7 @@ import {
   BookOpen,
   Filter
 } from 'lucide-react';
+import apiClient from '../../lib/api-client';
 
 export default function MesSeances() {
   const { data: session, status } = useSession();
@@ -41,24 +42,21 @@ export default function MesSeances() {
       setLoading(true);
       setError(null);
 
-      const params = new URLSearchParams({
-        includeStats: 'true',
-        ...(filterStatus !== 'all' && { status: filterStatus }),
-        ...(filterModule !== 'all' && { moduleId: filterModule })
-      });
-
-      const response = await fetch(`/api/intervenants/mes-seances?${params}`);
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Erreur lors du chargement des séances');
+      if (session?.accessToken) {
+        apiClient.setToken(session.accessToken);
       }
+
+      const params = { includeStats: 'true' };
+      if (filterStatus !== 'all') params.status = filterStatus;
+      if (filterModule !== 'all') params.moduleId = filterModule;
+
+      const data = await apiClient.intervenants.getMesSeances(params);
 
       setSeances(data.seances || []);
       setStats(data.stats || null);
       setModules(data.modules || []);
     } catch (err) {
-      setError(err.message);
+      setError(err.message || 'Erreur lors du chargement des séances');
     } finally {
       setLoading(false);
     }
@@ -73,19 +71,11 @@ export default function MesSeances() {
       setCompletingId(seanceId);
       setError(null);
 
-      const response = await fetch(`/api/seances/${seanceId}/complete`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ notes })
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Erreur lors de la complétion de la séance');
+      if (session?.accessToken) {
+        apiClient.setToken(session.accessToken);
       }
+
+      const data = await apiClient.seances.complete(seanceId, { notes });
 
       // Show success message
       alert(`Séance marquée comme terminée !\n\nModule: ${data.module.code}\nProgression: ${data.module.progression}%\nHeures effectuées: ${data.module.heuresEffectuees}/${data.module.heuresTotal}h`);
@@ -93,8 +83,8 @@ export default function MesSeances() {
       // Refresh data
       await fetchSeances();
     } catch (err) {
-      setError(err.message);
-      alert('Erreur: ' + err.message);
+      setError(err.message || 'Erreur lors de la complétion de la séance');
+      alert('Erreur: ' + (err.message || 'Erreur lors de la complétion'));
     } finally {
       setCompletingId(null);
     }

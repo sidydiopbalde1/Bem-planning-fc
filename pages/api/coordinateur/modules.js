@@ -1,18 +1,12 @@
-// pages/api/coordinateur/modules.js
-import { getServerSession } from 'next-auth';
-import { authOptions } from '../auth/[...nextauth]';
 import { PrismaClient } from '@prisma/client';
+import { withCoordinator } from '../../../lib/withApiHandler';
 
 const prisma = new PrismaClient();
 
-export default async function handler(req, res) {
+async function handler(req, res) {
+  const session = req.session;
+
   try {
-    const session = await getServerSession(req, res, authOptions);
-
-    if (!session || !['COORDINATOR', 'ADMIN'].includes(session.user.role)) {
-      return res.status(403).json({ error: 'Accès non autorisé' });
-    }
-
     switch (req.method) {
       case 'GET':
         return await handleGet(req, res, session);
@@ -28,7 +22,11 @@ export default async function handler(req, res) {
 }
 
 async function handleGet(req, res, session) {
-  const { programmeId, search, status } = req.query;
+  const { programmeId, search, status, page = 1, limit = 12 } = req.query;
+
+  const pageNum = parseInt(page);
+  const limitNum = parseInt(limit);
+  const skip = (pageNum - 1) * limitNum;
 
   const where = {};
 
@@ -63,6 +61,9 @@ async function handleGet(req, res, session) {
     where.status = status;
   }
 
+  // Compter le total pour la pagination
+  const total = await prisma.module.count({ where });
+
   const modules = await prisma.module.findMany({
     where,
     include: {
@@ -87,10 +88,20 @@ async function handleGet(req, res, session) {
         }
       }
     },
-    orderBy: { code: 'asc' }
+    orderBy: { code: 'asc' },
+    skip,
+    take: limitNum
   });
 
-  return res.status(200).json({ modules });
+  return res.status(200).json({
+    modules,
+    pagination: {
+      page: pageNum,
+      limit: limitNum,
+      total,
+      pages: Math.ceil(total / limitNum)
+    }
+  });
 }
 
 async function handlePost(req, res, session) {
@@ -178,3 +189,5 @@ async function handlePost(req, res, session) {
 
   return res.status(201).json({ module, message: 'Module créé avec succès' });
 }
+
+export default withCoordinator(handler, { entity: 'Module' });

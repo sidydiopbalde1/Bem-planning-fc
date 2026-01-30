@@ -3,6 +3,8 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import { useSession } from 'next-auth/react';
 import Layout from '../../../components/layout';
+import ConfirmModal from '../../../components/modals/ConfirmModal';
+import apiClient from '../../../lib/api-client';
 import { ArrowLeft, Calendar, Users, BookOpen, Save, Send } from 'lucide-react';
 import Link from 'next/link';
 
@@ -20,6 +22,7 @@ export default function CreateEvaluationPage() {
     nombreInvitations: 0
   });
   const [errors, setErrors] = useState({});
+  const [modal, setModal] = useState({ isOpen: false, type: 'success', title: '', message: '', onConfirm: null });
 
   useEffect(() => {
     if (status === 'unauthenticated') {
@@ -30,19 +33,17 @@ export default function CreateEvaluationPage() {
   }, [status, session, router]);
 
   useEffect(() => {
-    if (status === 'authenticated') {
+    if (status === 'authenticated' && session?.accessToken) {
+      apiClient.setToken(session.accessToken);
       fetchModules();
       fetchIntervenants();
     }
-  }, [status]);
+  }, [status, session]);
 
   const fetchModules = async () => {
     try {
-      const response = await fetch('/api/coordinateur/modules?limit=1000');
-      if (response.ok) {
-        const data = await response.json();
-        setModules(data.modules || []);
-      }
+      const data = await apiClient.coordinateur.getModules({ limit: 1000 });
+      setModules(data.modules || []);
     } catch (error) {
       console.error('Error fetching modules:', error);
     }
@@ -50,11 +51,8 @@ export default function CreateEvaluationPage() {
 
   const fetchIntervenants = async () => {
     try {
-      const response = await fetch('/api/intervenants?limit=1000');
-      if (response.ok) {
-        const data = await response.json();
-        setIntervenants(data.intervenants || []);
-      }
+      const data = await apiClient.intervenants.getAll({ limit: 1000 });
+      setIntervenants(data.data || []);
     } catch (error) {
       console.error('Error fetching intervenants:', error);
     }
@@ -90,24 +88,25 @@ export default function CreateEvaluationPage() {
     if (!validateForm()) return;
 
     setLoading(true);
-
-    try {
-      const response = await fetch('/api/coordinateur/evaluations', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData)
+    
+    
+     try {
+      const data = await apiClient.evaluations.create(formData);
+      console.log('Create evaluation response:', data);
+      setModal({
+        isOpen: true,
+        type: 'success',
+        title: 'Campagne créée',
+        message: 'La campagne d\'évaluation a été créée avec succès !',
+        onConfirm: () => router.push(`/coordinateur/evaluations/${data.id}`)
       });
-
-      if (response.ok) {
-        const data = await response.json();
-        alert('Campagne d\'évaluation créée avec succès!');
-        router.push(`/coordinateur/evaluations/${data.evaluation.id}`);
-      } else {
-        const data = await response.json();
-        alert(`Erreur: ${data.error || 'Impossible de créer la campagne'}`);
-      }
     } catch (error) {
-      alert('Erreur de connexion au serveur');
+      setModal({
+        isOpen: true,
+        type: 'error',
+        title: 'Erreur',
+        message: error.message || 'Impossible de créer la campagne'
+      });
     } finally {
       setLoading(false);
     }
@@ -320,6 +319,18 @@ export default function CreateEvaluationPage() {
           </form>
         </div>
       </div>
+
+      {/* Modal de confirmation/notification */}
+      <ConfirmModal
+        isOpen={modal.isOpen}
+        onClose={() => setModal({ ...modal, isOpen: false })}
+        onConfirm={modal.onConfirm}
+        title={modal.title}
+        message={modal.message}
+        type={modal.type}
+        confirmText="OK"
+        showCancel={false}
+      />
     </Layout>
   );
 }

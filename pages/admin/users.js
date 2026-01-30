@@ -5,10 +5,13 @@ import { useRouter } from 'next/router';
 import Head from 'next/head';
 import Layout from '../../components/layout.js';
 import PageTransition, { AnimatedCard, SlideIn } from '../../components/ui/PageTransition.js';
+import Pagination from '../../components/ui/Pagination';
+import AnimatedPagination from '../../components/ui/AnimatedPagination';
 import {
   Users, UserPlus, Search, Filter, Edit2, Trash2,
   ShieldCheck, User, BookOpen, AlertCircle, CheckCircle
 } from 'lucide-react';
+import apiClient from '../../lib/api-client';
 
 export default function UsersManagement() {
   const { data: session, status } = useSession();
@@ -24,6 +27,9 @@ export default function UsersManagement() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [selectedUser, setSelectedUser] = useState(null);
   const [actionLoading, setActionLoading] = useState(false);
+  const [totalUsers, setTotalUsers] = useState(0);
+  const [page, setPage] = useState(1);
+  const [pagination, setPagination] = useState(null);
 
   // Debounce pour la recherche
   useEffect(() => {
@@ -48,29 +54,40 @@ export default function UsersManagement() {
     if (status === 'authenticated' && session?.user?.role === 'ADMIN') {
       fetchUsers();
     }
-  }, [status, session, debouncedSearchTerm, roleFilter]);
+  }, [status, session, debouncedSearchTerm, roleFilter, page]);
+
+  // Reset page when filters change
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedSearchTerm, roleFilter]);
 
   const fetchUsers = async () => {
     try {
       setLoading(true);
-      const params = new URLSearchParams();
-      if (debouncedSearchTerm) params.append('search', debouncedSearchTerm);
-      if (roleFilter) params.append('role', roleFilter);
-
-      const response = await fetch(`/api/admin/users?${params}`);
-      const data = await response.json();
-
-      if (response.ok) {
-        setUsers(data.users);
-        setStats(data.stats);
-      } else {
-        console.error('Erreur:', data.error);
+      if (session?.accessToken) {
+        apiClient.setToken(session.accessToken);
       }
+
+      const params = { page, limit: 12 };
+      if (debouncedSearchTerm) params.search = debouncedSearchTerm;
+      if (roleFilter) params.role = roleFilter;
+
+      const data = await apiClient.admin.getUsers(params);
+      console.log('Données des utilisateurs:', data);
+      setUsers(data.data || []);
+      setStats(data.stats || {});
+      setTotalUsers(data.pagination.total || 0);
+      setPagination(data.pagination || null);
     } catch (error) {
       console.error('Erreur lors du chargement des utilisateurs:', error);
     } finally {
       setLoading(false);
     }
+  };
+
+  const handlePageChange = (newPage) => {
+    setPage(newPage);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleDeleteUser = async (userId) => {
@@ -80,38 +97,32 @@ export default function UsersManagement() {
 
     try {
       setActionLoading(true);
-      const response = await fetch(`/api/admin/users/${userId}`, {
-        method: 'DELETE'
-      });
-
-      const data = await response.json();
-
-      if (response.ok) {
-        setUsers(users.filter(u => u.id !== userId));
-        alert('Utilisateur supprimé avec succès');
-      } else {
-        if (response.status === 400 && data.counts) {
-          const confirmForce = confirm(
-            `${data.message}\n\nVoulez-vous vraiment supprimer cet utilisateur et toutes ses données ?`
-          );
-
-          if (confirmForce) {
-            const forceResponse = await fetch(`/api/admin/users/${userId}?force=true`, {
-              method: 'DELETE'
-            });
-
-            if (forceResponse.ok) {
-              setUsers(users.filter(u => u.id !== userId));
-              alert('Utilisateur supprimé avec succès');
-            }
-          }
-        } else {
-          alert(data.message || 'Erreur lors de la suppression');
-        }
+      if (session?.accessToken) {
+        apiClient.setToken(session.accessToken);
       }
+
+      await apiClient.admin.deleteUser(userId);
+      setUsers(users.filter(u => u.id !== userId));
+      alert('Utilisateur supprimé avec succès');
     } catch (error) {
       console.error('Erreur:', error);
-      alert('Erreur lors de la suppression');
+      if (error.status === 400 && error.counts) {
+        const confirmForce = confirm(
+          `${error.message}\n\nVoulez-vous vraiment supprimer cet utilisateur et toutes ses données ?`
+        );
+
+        if (confirmForce) {
+          try {
+            await apiClient.admin.deleteUser(userId, true);
+            setUsers(users.filter(u => u.id !== userId));
+            alert('Utilisateur supprimé avec succès');
+          } catch (forceError) {
+            alert(forceError.message || 'Erreur lors de la suppression forcée');
+          }
+        }
+      } else {
+        alert(error.message || 'Erreur lors de la suppression');
+      }
     } finally {
       setActionLoading(false);
     }
@@ -204,7 +215,7 @@ export default function UsersManagement() {
                   <div>
                     <p className="text-sm text-gray-600 dark:text-gray-400">Total</p>
                     <p className="text-2xl font-bold text-gray-900 dark:text-white">
-                      {stats.total || 0}
+                      {totalUsers || 0}
                     </p>
                   </div>
                   <Users className="w-10 h-10 text-gray-400" />
@@ -390,6 +401,15 @@ export default function UsersManagement() {
                   </div>
                 )}
               </div>
+
+              {/* Pagination */}
+              {pagination && pagination.pages > 1 && (
+                 <AnimatedPagination
+                    pagination={pagination}
+                            currentPage={page}
+                            onPageChange={handlePageChange}
+                         />
+              )}
             </div>
           </AnimatedCard>
         </div>
@@ -452,26 +472,15 @@ function CreateUserModal({ onClose, onSuccess }) {
 
     try {
       setLoading(true);
-      const response = await fetch('/api/admin/users', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: formData.email,
-          name: formData.name,
-          password: formData.password,
-          role: formData.role
-        })
+      await apiClient.admin.createUser({
+        email: formData.email,
+        name: formData.name,
+        password: formData.password,
+        role: formData.role
       });
-
-      const data = await response.json();
-
-      if (response.ok) {
-        onSuccess();
-      } else {
-        setError(data.message || 'Erreur lors de la création');
-      }
+      onSuccess();
     } catch (error) {
-      setError('Erreur réseau');
+      setError(error.message || 'Erreur lors de la création');
     } finally {
       setLoading(false);
     }
@@ -480,12 +489,12 @@ function CreateUserModal({ onClose, onSuccess }) {
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto">
       <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
-        <div className="fixed inset-0 bg-grey bg-opacity-1  z-40" onClick={onClose}></div>
+        <div className="fixed inset-0 bg-black/50 z-30" onClick={onClose}></div>
 
-           <span className="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
+        <span className="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
 
-        <div className="inline-block align-bottom bg-white dark:bg-gray-800 rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full"
-          onClick={(e)=>{e.stopPropagation();}}
+        <div className="relative z-50 inline-block align-bottom bg-white dark:bg-gray-800 rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full"
+          onClick={(e) => e.stopPropagation()}
         >
           <form onSubmit={handleSubmit}>
             <div className="px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
@@ -636,21 +645,10 @@ function EditUserModal({ user, onClose, onSuccess }) {
         updateData.password = formData.password;
       }
 
-      const response = await fetch(`/api/admin/users/${user.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updateData)
-      });
-
-      const data = await response.json();
-
-      if (response.ok) {
-        onSuccess();
-      } else {
-        setError(data.message || 'Erreur lors de la mise à jour');
-      }
+      await apiClient.admin.updateUser(user.id, updateData);
+      onSuccess();
     } catch (error) {
-      setError('Erreur réseau');
+      setError(error.message || 'Erreur lors de la mise à jour');
     } finally {
       setLoading(false);
     }

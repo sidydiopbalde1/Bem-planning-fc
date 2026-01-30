@@ -1,18 +1,13 @@
 // pages/api/admin/salles.js
-import { getServerSession } from 'next-auth';
-import { authOptions } from '../auth/[...nextauth]';
 import { PrismaClient } from '@prisma/client';
+import { withAdmin } from '../../../lib/withApiHandler';
 
 const prisma = new PrismaClient();
 
-export default async function handler(req, res) {
+async function handler(req, res) {
+  const session = req.session;
+
   try {
-    const session = await getServerSession(req, res, authOptions);
-
-    if (!session || session.user.role !== 'ADMIN') {
-      return res.status(403).json({ error: 'Accès non autorisé' });
-    }
-
     switch (req.method) {
       case 'GET':
         return await handleGet(req, res);
@@ -27,8 +22,10 @@ export default async function handler(req, res) {
   }
 }
 
+export default withAdmin(handler, { entity: 'Salle' });
+
 async function handleGet(req, res) {
-  const { search, batiment, disponible } = req.query;
+  const { search, batiment, disponible, page = 1, limit = 12 } = req.query;
 
   const where = {};
 
@@ -47,13 +44,18 @@ async function handleGet(req, res) {
     where.disponible = disponible === 'true';
   }
 
+  // Pagination
+  const skip = (parseInt(page) - 1) * parseInt(limit);
+
   const [salles, total, batiments] = await Promise.all([
     prisma.salle.findMany({
       where,
       orderBy: [
         { batiment: 'asc' },
         { nom: 'asc' }
-      ]
+      ],
+      skip,
+      take: parseInt(limit)
     }),
     prisma.salle.count({ where }),
     prisma.salle.groupBy({
@@ -72,7 +74,16 @@ async function handleGet(req, res) {
     }))
   };
 
-  return res.status(200).json({ salles, stats });
+  return res.status(200).json({
+    salles,
+    stats,
+    pagination: {
+      page: parseInt(page),
+      limit: parseInt(limit),
+      total,
+      pages: Math.ceil(total / parseInt(limit))
+    }
+  });
 }
 
 async function handlePost(req, res, session) {

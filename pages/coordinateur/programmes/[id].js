@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import { useSession } from 'next-auth/react';
 import Layout from '../../../components/layout';
+import apiClient from '../../../lib/api-client';
 import {
   BookOpen, Calendar, Clock, TrendingUp, AlertTriangle, User, Edit2, Trash2, Plus,
   FileText, CheckCircle, XCircle, BarChart3, Download, ArrowLeft
@@ -36,16 +37,11 @@ export default function ProgrammeDetails() {
   const fetchProgramme = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`/api/coordinateur/programmes/${id}`);
-      if (response.ok) {
-        const data = await response.json();
-        setProgramme(data.programme);
-      } else {
-        const data = await response.json();
-        setError(data.error || 'Erreur lors du chargement du programme');
-      }
+      const data = await apiClient.programmes.getById(id);
+      // L'API retourne directement le programme, pas { programme: ... }
+      setProgramme(data.programme || data);
     } catch (error) {
-      setError('Erreur de connexion au serveur');
+      setError(error.message || 'Erreur de connexion au serveur');
     } finally {
       setLoading(false);
     }
@@ -53,18 +49,10 @@ export default function ProgrammeDetails() {
 
   const handleDelete = async () => {
     try {
-      const response = await fetch(`/api/coordinateur/programmes/${id}`, {
-        method: 'DELETE'
-      });
-
-      if (response.ok) {
-        router.push('/coordinateur/programmes');
-      } else {
-        const data = await response.json();
-        setError(data.error || 'Erreur lors de la suppression');
-      }
+      await apiClient.programmes.delete(id);
+      router.push('/coordinateur/programmes');
     } catch (error) {
-      setError('Erreur de connexion au serveur');
+      setError(error.message || 'Erreur lors de la suppression');
     }
     setShowDeleteConfirm(false);
   };

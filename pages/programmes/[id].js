@@ -5,10 +5,11 @@ import Head from 'next/head';
 import Link from 'next/link';
 import Layout from '../../components/layout';
 import CreateModuleModal from '../../components/modals/CreateModuleModal.js';
-import { 
-  ArrowLeft, 
-  Edit, 
-  Trash2, 
+import apiClient from '../../lib/api-client';
+import {
+  ArrowLeft,
+  Edit as EditIcon,
+  Trash2,
   Plus,
   Calendar,
   Clock,
@@ -53,19 +54,10 @@ export default function ProgrammeDetail() {
 
   const fetchProgramme = async () => {
     try {
-      const response = await fetch(`/api/programmes/${id}`);
-      const data = await response.json();
-      
-      if (response.ok) {
-        setProgramme(data.programme);
-      } else {
-        console.error('Erreur:', data.error);
-        if (response.status === 404) {
-          router.push('/programmes');
-        }
-      }
+      const data = await apiClient.programmes.getById(id);
+      setProgramme(data.programme || data);
     } catch (error) {
-      console.error('Erreur fetch:', error);
+      console.error('Erreur fetch:', error.message || error);
       router.push('/programmes');
     } finally {
       setLoading(false);
@@ -78,18 +70,10 @@ export default function ProgrammeDetail() {
     }
 
     try {
-      const response = await fetch(`/api/programmes/${id}`, {
-        method: 'DELETE',
-      });
-
-      if (response.ok) {
-        router.push('/programmes');
-      } else {
-        const data = await response.json();
-        alert(data.error || 'Erreur lors de la suppression');
-      }
+      await apiClient.programmes.delete(id);
+      router.push('/programmes');
     } catch (error) {
-      alert('Erreur de connexion');
+      alert(error.message || 'Erreur lors de la suppression');
     }
   };
 
@@ -197,7 +181,7 @@ export default function ProgrammeDetail() {
               href={`/programmes/${programme.id}/edit`}
               className="flex items-center px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
             >
-              <Edit className="h-4 w-4 mr-2" />
+              <EditIcon className="h-4 w-4 mr-2" />
               Modifier
             </Link>
             <button

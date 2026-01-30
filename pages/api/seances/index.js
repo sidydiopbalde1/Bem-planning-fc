@@ -1,17 +1,12 @@
 // pages/api/seances/index.js
-import { getServerSession } from 'next-auth/next';
 import { PrismaClient } from '@prisma/client';
-import { authOptions } from '../auth/[...nextauth]';
+import { withAuth } from '../../../lib/withApiHandler';
 
 const prisma = new PrismaClient();
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   try {
-    const session = await getServerSession(req, res, authOptions);
-    
-    if (!session || !session.user) {
-      return res.status(401).json({ error: 'Non authentifié' });
-    }
+    const session = req.session;
 
     if (req.method === 'GET') {
       const { startDate, endDate, programmeId, status } = req.query;
@@ -260,3 +255,5 @@ export default async function handler(req, res) {
     await prisma.$disconnect();
   }
 }
+
+export default withAuth(handler, { entity: 'Seance' });

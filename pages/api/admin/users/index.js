@@ -1,7 +1,8 @@
 // pages/api/admin/users/index.js
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
-import { requireAdmin, logActivity, getClientIp } from '../../../../lib/middleware/requireRole';
+import { withAdmin } from '../../../../lib/withApiHandler';
+import { logActivity, getClientIp } from '../../../../lib/middleware/requireRole';
 
 const prisma = new PrismaClient();
 
@@ -33,7 +34,7 @@ async function handler(req, res) {
  * Récupère la liste de tous les utilisateurs
  */
 async function getUsers(req, res) {
-  const { search, role, sortBy = 'createdAt', order = 'desc' } = req.query;
+  const { search, role, sortBy = 'createdAt', order = 'desc', page = 1, limit = 12 } = req.query;
 
   // Construction de la requête avec filtres
   const where = {};
@@ -49,25 +50,33 @@ async function getUsers(req, res) {
     where.role = role;
   }
 
-  // Récupération des utilisateurs
-  const users = await prisma.user.findMany({
-    where,
-    select: {
-      id: true,
-      email: true,
-      name: true,
-      role: true,
-      createdAt: true,
-      updatedAt: true,
-      _count: {
-        select: {
-          programmes: true,
-          modules: true
+  // Pagination
+  const skip = (parseInt(page) - 1) * parseInt(limit);
+
+  // Récupération des utilisateurs avec pagination
+  const [users, total] = await Promise.all([
+    prisma.user.findMany({
+      where,
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+        createdAt: true,
+        updatedAt: true,
+        _count: {
+          select: {
+            programmes: true,
+            modules: true
+          }
         }
-      }
-    },
-    orderBy: { [sortBy]: order }
-  });
+      },
+      orderBy: { [sortBy]: order },
+      skip,
+      take: parseInt(limit)
+    }),
+    prisma.user.count({ where })
+  ]);
 
   // Statistiques globales
   const stats = await prisma.user.groupBy({
@@ -77,8 +86,15 @@ async function getUsers(req, res) {
 
   return res.status(200).json({
     users,
+    total,
+    pagination: {
+      page: parseInt(page),
+      limit: parseInt(limit),
+      total,
+      pages: Math.ceil(total / parseInt(limit))
+    },
     stats: {
-      total: users.length,
+      total,
       byRole: stats.reduce((acc, stat) => {
         acc[stat.role] = stat._count;
         return acc;
@@ -167,6 +183,4 @@ async function createUser(req, res) {
   });
 }
 
-export default function (req, res) {
-  return requireAdmin(req, res, handler);
-}
+export default withAdmin(handler, { entity: 'User' });

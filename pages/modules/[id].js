@@ -5,10 +5,10 @@ import { useSession } from 'next-auth/react';
 import Head from 'next/head';
 import Link from 'next/link';
 import Layout from '../../components/layout';
-import { 
-  ArrowLeft, 
-  Edit, 
-  Trash2, 
+import {
+  ArrowLeft,
+  Edit as EditIcon,
+  Trash2,
   Plus,
   Calendar,
   Clock,
@@ -23,6 +23,7 @@ import {
   Award,
   BarChart3
 } from 'lucide-react';
+import apiClient from '../../lib/api-client';
 
 export default function ModuleDetail() {
   const router = useRouter();
@@ -45,20 +46,17 @@ export default function ModuleDetail() {
 
   const fetchModule = async () => {
     try {
-      const response = await fetch(`/api/modules/${id}`);
-      const data = await response.json();
-      
-      if (response.ok) {
-        setModule(data.module);
-      } else {
-        console.error('Erreur:', data.error);
-        if (response.status === 404) {
-          router.push('/programmes');
-        }
+      if (session?.accessToken) {
+        apiClient.setToken(session.accessToken);
       }
+
+      const data = await apiClient.modules.getById(id);
+      setModule(data.module || data);
     } catch (error) {
       console.error('Erreur fetch:', error);
-      router.push('/programmes');
+      if (error.status === 404) {
+        router.push('/programmes');
+      }
     } finally {
       setLoading(false);
     }
@@ -70,18 +68,14 @@ export default function ModuleDetail() {
     }
 
     try {
-      const response = await fetch(`/api/modules/${id}`, {
-        method: 'DELETE',
-      });
-
-      if (response.ok) {
-        router.push(`/programmes/${module.programme.id}`);
-      } else {
-        const data = await response.json();
-        alert(data.error || 'Erreur lors de la suppression');
+      if (session?.accessToken) {
+        apiClient.setToken(session.accessToken);
       }
+
+      await apiClient.modules.delete(id);
+      router.push(`/programmes/${module.programme.id}`);
     } catch (error) {
-      alert('Erreur de connexion');
+      alert(error.message || 'Erreur lors de la suppression');
     }
   };
 
@@ -208,7 +202,7 @@ export default function ModuleDetail() {
               href={`/modules/${module.id}/edit`}
               className="flex items-center px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
             >
-              <Edit className="h-4 w-4 mr-2" />
+              <EditIcon className="h-4 w-4 mr-2" />
               Modifier
             </Link>
             <button

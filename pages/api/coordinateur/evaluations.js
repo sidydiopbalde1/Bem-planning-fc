@@ -1,20 +1,15 @@
 // pages/api/coordinateur/evaluations.js
-import { getServerSession } from 'next-auth';
-import { authOptions } from '../auth/[...nextauth]';
 import { PrismaClient } from '@prisma/client';
+import { withCoordinator } from '../../../lib/withApiHandler';
 import { sendEmail, emailTemplates } from '../../../lib/email';
 import crypto from 'crypto';
 
 const prisma = new PrismaClient();
 
-export default async function handler(req, res) {
+async function handler(req, res) {
+  const session = req.session;
+
   try {
-    const session = await getServerSession(req, res, authOptions);
-
-    if (!session || !['COORDINATOR', 'ADMIN'].includes(session.user.role)) {
-      return res.status(403).json({ error: 'Accès non autorisé' });
-    }
-
     if (req.method === 'GET') {
       return await handleGet(req, res, session);
     }
@@ -31,6 +26,8 @@ export default async function handler(req, res) {
     await prisma.$disconnect();
   }
 }
+
+export default withCoordinator(handler, { entity: 'Evaluation' });
 
 async function handleGet(req, res, session) {
   const { moduleId, statut, page = 1, limit = 20 } = req.query;

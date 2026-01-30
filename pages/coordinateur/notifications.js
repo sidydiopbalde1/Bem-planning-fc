@@ -3,10 +3,12 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import { useSession } from 'next-auth/react';
 import Layout from '../../components/layout';
+import apiClient from '../../lib/api-client';
 import {
   Bell, CheckCircle, Trash2, Calendar, AlertTriangle,
   MessageSquare, FileText, Users, Clock, ExternalLink
 } from 'lucide-react';
+import Pagination from '../../components/ui/Pagination';
 
 export default function NotificationsPage() {
   const router = useRouter();
@@ -17,6 +19,8 @@ export default function NotificationsPage() {
   const [error, setError] = useState('');
   const [filter, setFilter] = useState('all');
   const [selectedIds, setSelectedIds] = useState([]);
+  const [page, setPage] = useState(1);
+  const [pagination, setPagination] = useState(null);
 
   useEffect(() => {
     if (status === 'unauthenticated') {
@@ -28,28 +32,41 @@ export default function NotificationsPage() {
     if (status === 'authenticated') {
       fetchNotifications();
     }
-  }, [status, filter]);
+  }, [status, filter, page]);
+
+  // Reset page when filter changes
+  useEffect(() => {
+    setPage(1);
+  }, [filter]);
 
   const fetchNotifications = async () => {
     try {
       setLoading(true);
-      const params = new URLSearchParams();
-      if (filter === 'non_lues') params.append('lu', 'false');
-      if (filter === 'lues') params.append('lu', 'true');
+      const params = { page, limit: 10 };
+      if (filter === 'non_lues') params.lu = 'false';
+      if (filter === 'lues') params.lu = 'true';
 
-      const response = await fetch(`/api/coordinateur/notifications?${params}`);
-      if (response.ok) {
-        const data = await response.json();
-        setNotifications(data.notifications);
-        setStats(data.stats);
-      } else {
-        setError('Erreur lors du chargement des notifications');
+      const data = await apiClient.notifications.getAll(params);
+      setNotifications(data.notifications);
+      setStats(data.stats);
+      // Normaliser la pagination
+      if (data.pagination) {
+        setPagination({
+          ...data.pagination,
+          pages: data.pagination.pages || data.pagination.pages
+        });
       }
     } catch (error) {
-      setError('Erreur de connexion au serveur');
+      setError(error.message || 'Erreur de connexion au serveur');
     } finally {
       setLoading(false);
     }
+  };
+
+  const handlePageChange = (newPage) => {
+    setPage(newPage);
+    setSelectedIds([]); // Reset selection when changing page
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const getTypeIcon = (type) => {
@@ -113,23 +130,11 @@ export default function NotificationsPage() {
     if (selectedIds.length === 0) return;
 
     try {
-      const response = await fetch('/api/coordinateur/notifications', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          notificationIds: selectedIds,
-          action: 'marquer_lu'
-        })
-      });
-
-      if (response.ok) {
-        setSelectedIds([]);
-        fetchNotifications();
-      } else {
-        alert('Erreur lors de la mise à jour des notifications');
-      }
+      await Promise.all(selectedIds.map(id => apiClient.notifications.markAsRead(id)));
+      setSelectedIds([]);
+      fetchNotifications();
     } catch (error) {
-      alert('Erreur de connexion au serveur');
+      alert(error.message || 'Erreur lors de la mise à jour des notifications');
     }
   };
 
@@ -138,20 +143,11 @@ export default function NotificationsPage() {
     if (!confirm(`Supprimer ${selectedIds.length} notification(s) ?`)) return;
 
     try {
-      const response = await fetch('/api/coordinateur/notifications', {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ notificationIds: selectedIds })
-      });
-
-      if (response.ok) {
-        setSelectedIds([]);
-        fetchNotifications();
-      } else {
-        alert('Erreur lors de la suppression des notifications');
-      }
+      await Promise.all(selectedIds.map(id => apiClient.delete(`/notifications/${id}`)));
+      setSelectedIds([]);
+      fetchNotifications();
     } catch (error) {
-      alert('Erreur de connexion au serveur');
+      alert(error.message || 'Erreur lors de la suppression des notifications');
     }
   };
 
@@ -221,7 +217,7 @@ export default function NotificationsPage() {
               onClick={() => setFilter('non_lues')}
               className={`px-4 py-2 rounded-lg ${filter === 'non_lues' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
             >
-              Non lues ({stats?.nonLues || 0})
+              Non lues ({stats?.unread || 0})
             </button>
             <button
               onClick={() => setFilter('lues')}
@@ -307,6 +303,15 @@ export default function NotificationsPage() {
             </div>
           )}
         </div>
+
+        {/* Pagination */}
+        {pagination && pagination.pages > 1 && (
+          <Pagination
+            pagination={pagination}
+            currentPage={page}
+            onPageChange={handlePageChange}
+          />
+        )}
       </div>
     </Layout>
   );

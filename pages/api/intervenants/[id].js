@@ -1,28 +1,13 @@
 // pages/api/intervenants/[id].js - Pour suppression et détails
-import { getServerSession } from 'next-auth/next';
 import { PrismaClient } from '@prisma/client';
-import { authOptions } from '../auth/[...nextauth]';
+import { withCoordinator } from '../../../lib/withApiHandler';
 
 const prisma = new PrismaClient();
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   const { id } = req.query;
 
   try {
-    const session = await getServerSession(req, res, authOptions);
-
-    if (!session || !session.user) {
-      return res.status(401).json({ error: 'Non authentifié' });
-    }
-
-    // Vérifier que l'utilisateur n'est pas un simple intervenant (TEACHER)
-    // Seuls les ADMIN et COORDINATOR peuvent gérer les intervenants
-    if (session.user.role === 'TEACHER') {
-      return res.status(403).json({
-        error: 'Accès refusé. Vous n\'avez pas les permissions nécessaires pour accéder à cette ressource.'
-      });
-    }
-
     if (req.method === 'GET') {
       // Récupérer les détails d'un intervenant
       const intervenant = await prisma.intervenant.findUnique({
@@ -189,3 +174,5 @@ export default async function handler(req, res) {
     await prisma.$disconnect();
   }
 }
+
+export default withCoordinator(handler, { entity: 'Intervenant' });

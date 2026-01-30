@@ -1,6 +1,7 @@
 // components/modals/CreateIntervenantModal.js - Version corrigée
 import { useState } from 'react';
 import { X, Save, User, Mail, Phone, MapPin, GraduationCap, Building2, AlertCircle } from 'lucide-react';
+import apiClient from '../../lib/api-client';
 
 const CreateIntervenantModal = ({ isOpen, onClose, onSuccess }) => {
   const [formData, setFormData] = useState({
@@ -66,47 +67,35 @@ const CreateIntervenantModal = ({ isOpen, onClose, onSuccess }) => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
+
     if (!validateForm()) {
       return;
     }
 
     setLoading(true);
     try {
-      const response = await fetch('/api/intervenants/create', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(formData),
+      const data = await apiClient.intervenants.create(formData);
+
+      onSuccess && onSuccess(data.intervenant || data);
+      onClose();
+      // Reset form
+      setFormData({
+        civilite: '',
+        nom: '',
+        prenom: '',
+        email: '',
+        telephone: '',
+        grade: '',
+        specialite: '',
+        etablissement: '',
+        disponible: true
       });
-
-      const data = await response.json();
-
-      if (response.ok) {
-        onSuccess && onSuccess(data.intervenant);
-        onClose();
-        // Reset form
-        setFormData({
-          civilite: '',
-          nom: '',
-          prenom: '',
-          email: '',
-          telephone: '',
-          grade: '',
-          specialite: '',
-          etablissement: '',
-          disponible: true
-        });
-      } else {
-        if (data.errors) {
-          setErrors(data.errors);
-        } else {
-          setErrors({ general: data.error || 'Erreur lors de la création de l\'intervenant' });
-        }
-      }
     } catch (error) {
-      setErrors({ general: 'Erreur de connexion. Veuillez réessayer.' });
+      if (error.errors) {
+        setErrors(error.errors);
+      } else {
+        setErrors({ general: error.message || 'Erreur lors de la création de l\'intervenant' });
+      }
     } finally {
       setLoading(false);
     }
@@ -125,8 +114,7 @@ const CreateIntervenantModal = ({ isOpen, onClose, onSuccess }) => {
   return (
     <>
       {/* Overlay - Fond semi-transparent */}
-      // Avec effet de flou en arrière-plan
-<div className="fixed inset-0 bg-grey bg-opacity-1 backdrop-blur-sm z-40" onClick={onClose}></div>
+      <div className="fixed inset-0 bg-black/50 z-40" onClick={onClose}></div>
       
       {/* Modal Container */}
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4">

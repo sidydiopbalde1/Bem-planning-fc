@@ -1,20 +1,14 @@
 // pages/api/modules/[id].js
-import { getServerSession } from 'next-auth/next';
 import { PrismaClient } from '@prisma/client';
-import { authOptions } from '../auth/[...nextauth]';
+import { withAuth } from '../../../lib/withApiHandler';
 
 const prisma = new PrismaClient();
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   const { id } = req.query;
+  const session = req.session;
 
   try {
-    const session = await getServerSession(req, res, authOptions);
-    
-    if (!session || !session.user) {
-      return res.status(401).json({ error: 'Non authentifié' });
-    }
-
     if (req.method === 'GET') {
       // Récupérer les détails d'un module
       const module = await prisma.module.findFirst({
@@ -225,3 +219,5 @@ export default async function handler(req, res) {
     await prisma.$disconnect();
   }
 }
+
+export default withAuth(handler, { entity: 'Module' });

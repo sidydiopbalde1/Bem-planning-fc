@@ -3,6 +3,8 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import { useSession } from 'next-auth/react';
 import Layout from '../../../components/layout';
+import ConfirmModal from '../../../components/modals/ConfirmModal';
+import apiClient from '../../../lib/api-client';
 import {
   ArrowLeft, Calendar, Users, BookOpen, Send, CheckCircle, XCircle,
   Edit, Copy, ExternalLink, BarChart3, Clock, AlertCircle, Star
@@ -17,6 +19,8 @@ export default function EvaluationDetailsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [actionLoading, setActionLoading] = useState(false);
+  const [confirmModal, setConfirmModal] = useState({ isOpen: false, type: 'confirm', title: '', message: '', onConfirm: null });
+  const [alertModal, setAlertModal] = useState({ isOpen: false, type: 'success', title: '', message: '' });
 
   useEffect(() => {
     if (status === 'unauthenticated') {
@@ -35,78 +39,89 @@ export default function EvaluationDetailsPage() {
   const fetchEvaluation = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`/api/coordinateur/evaluations/${id}`);
-      if (response.ok) {
-        const data = await response.json();
-        setEvaluation(data.evaluation);
-      } else {
-        setError('Campagne d\'évaluation introuvable');
-      }
+      const data = await apiClient.evaluations.getById(id);
+      console.log('Evaluation by id received:', data);
+      setEvaluation(data);
     } catch (error) {
-      setError('Erreur de connexion au serveur');
+      setError(error.message || 'Erreur de connexion au serveur');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleEnvoyer = async () => {
-    if (!confirm('Êtes-vous sûr de vouloir envoyer cette campagne d\'évaluation ? Une notification sera envoyée à l\'intervenant.')) {
-      return;
-    }
-
-    setActionLoading(true);
-    try {
-      const response = await fetch(`/api/coordinateur/evaluations/${id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'envoyer' })
-      });
-
-      if (response.ok) {
-        alert('Campagne envoyée avec succès!');
-        fetchEvaluation();
-      } else {
-        const data = await response.json();
-        alert(`Erreur: ${data.error || 'Impossible d\'envoyer la campagne'}`);
+  const handleEnvoyer = () => {
+    setConfirmModal({
+      isOpen: true,
+      type: 'confirm',
+      title: 'Envoyer la campagne',
+      message: 'Êtes-vous sûr de vouloir envoyer cette campagne d\'évaluation ? Une notification sera envoyée à l\'intervenant.',
+      onConfirm: async () => {
+        setConfirmModal(prev => ({ ...prev, isOpen: false }));
+        setActionLoading(true);
+        try {
+          await apiClient.evaluations.update(id, { action: 'envoyer' });
+          setAlertModal({
+            isOpen: true,
+            type: 'success',
+            title: 'Campagne envoyée',
+            message: 'La campagne a été envoyée avec succès !'
+          });
+          fetchEvaluation();
+        } catch (error) {
+          setAlertModal({
+            isOpen: true,
+            type: 'error',
+            title: 'Erreur',
+            message: error.message || 'Impossible d\'envoyer la campagne'
+          });
+        } finally {
+          setActionLoading(false);
+        }
       }
-    } catch (error) {
-      alert('Erreur de connexion au serveur');
-    } finally {
-      setActionLoading(false);
-    }
+    });
   };
 
-  const handleTerminer = async () => {
-    if (!confirm('Êtes-vous sûr de vouloir terminer cette campagne ? Les résultats seront calculés et la campagne ne pourra plus être modifiée.')) {
-      return;
-    }
-
-    setActionLoading(true);
-    try {
-      const response = await fetch(`/api/coordinateur/evaluations/${id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'terminer' })
-      });
-
-      if (response.ok) {
-        alert('Campagne terminée avec succès!');
-        fetchEvaluation();
-      } else {
-        const data = await response.json();
-        alert(`Erreur: ${data.error || 'Impossible de terminer la campagne'}`);
+  const handleTerminer = () => {
+    setConfirmModal({
+      isOpen: true,
+      type: 'warning',
+      title: 'Terminer la campagne',
+      message: 'Êtes-vous sûr de vouloir terminer cette campagne ? Les résultats seront calculés et la campagne ne pourra plus être modifiée.',
+      onConfirm: async () => {
+        setConfirmModal(prev => ({ ...prev, isOpen: false }));
+        setActionLoading(true);
+        try {
+          await apiClient.evaluations.update(id, { action: 'terminer' });
+          setAlertModal({
+            isOpen: true,
+            type: 'success',
+            title: 'Campagne terminée',
+            message: 'La campagne a été terminée avec succès !'
+          });
+          fetchEvaluation();
+        } catch (error) {
+          setAlertModal({
+            isOpen: true,
+            type: 'error',
+            title: 'Erreur',
+            message: error.message || 'Impossible de terminer la campagne'
+          });
+        } finally {
+          setActionLoading(false);
+        }
       }
-    } catch (error) {
-      alert('Erreur de connexion au serveur');
-    } finally {
-      setActionLoading(false);
-    }
+    });
   };
 
   const copyLinkToClipboard = () => {
     if (evaluation?.lienEvaluation) {
       navigator.clipboard.writeText(evaluation.lienEvaluation);
-      alert('Lien copié dans le presse-papier!');
+      setAlertModal({
+        isOpen: true,
+        type: 'success',
+        title: 'Lien copié',
+        message: 'Le lien a été copié dans le presse-papier !'
+      });
     }
   };
 
@@ -457,6 +472,30 @@ export default function EvaluationDetailsPage() {
           </div>
         </div>
       </div>
+
+      {/* Modal de confirmation */}
+      <ConfirmModal
+        isOpen={confirmModal.isOpen}
+        onClose={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
+        onConfirm={confirmModal.onConfirm}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        type={confirmModal.type}
+        confirmText="Confirmer"
+        cancelText="Annuler"
+        loading={actionLoading}
+      />
+
+      {/* Modal d'alerte/notification */}
+      <ConfirmModal
+        isOpen={alertModal.isOpen}
+        onClose={() => setAlertModal(prev => ({ ...prev, isOpen: false }))}
+        title={alertModal.title}
+        message={alertModal.message}
+        type={alertModal.type}
+        confirmText="OK"
+        showCancel={false}
+      />
     </Layout>
   );
 }

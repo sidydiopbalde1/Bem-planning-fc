@@ -1,23 +1,18 @@
 // pages/api/user/profile.js
-import { getServerSession } from 'next-auth/next';
 import { PrismaClient } from '@prisma/client';
-import { authOptions } from '../auth/[...nextauth]';
+import { withAuth } from '../../../lib/withApiHandler';
 import bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (req.method !== 'PUT') {
     return res.status(405).json({ error: 'Method Not Allowed' });
   }
 
-  try {
-    const session = await getServerSession(req, res, authOptions);
-    
-    if (!session || !session.user) {
-      return res.status(401).json({ error: 'Non authentifié' });
-    }
+  const session = req.session;
 
+  try {
     const { name, currentPassword, newPassword } = req.body;
 
     // Validation
@@ -77,3 +72,5 @@ export default async function handler(req, res) {
     await prisma.$disconnect();
   }
 }
+
+export default withAuth(handler, { entity: 'UserProfile' });

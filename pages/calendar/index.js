@@ -4,6 +4,8 @@ import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
 import Layout from '../../components/layout';
+import CreateSeanceModal from '../../components/modals/CreateSeanceModal';
+import apiClient from '../../lib/api-client';
 import { 
   Calendar as CalendarIcon, 
   ChevronLeft, 
@@ -39,38 +41,34 @@ const Calendar = () => {
     intervenant: 'all'
   });
   const [selectedDate, setSelectedDate] = useState(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
 
   useEffect(() => {
     if (status === 'unauthenticated') {
       router.push('/auth/signin');
       return;
     }
-    
-    if (status === 'authenticated') {
+
+    if (status === 'authenticated' && session?.accessToken) {
+      apiClient.setToken(session.accessToken);
       fetchData();
     }
-  }, [status, router, currentDate]);
+  }, [status, session, router, currentDate]);
 
   const fetchData = async () => {
     setLoading(true);
     try {
-      // Fetch séances et programmes
-      const [seancesRes, programmesRes] = await Promise.all([
-        fetch('/api/seances'),
-        fetch('/api/programmes/programmes')
+      // Fetch séances et programmes en parallèle
+      const [seancesData, programmesData] = await Promise.all([
+        apiClient.seances.getAll(),
+        apiClient.programmes.getAll()
       ]);
-
-      if (seancesRes.ok) {
-        const seancesData = await seancesRes.json();
-        setSeances(seancesData.seances || []);
-      }
-
-      if (programmesRes.ok) {
-        const programmesData = await programmesRes.json();
-        setProgrammes(programmesData.programmes || []);
-      }
+      console.log('Seances data:', seancesData);
+      console.log('Programmes data:', programmesData);
+      setSeances(Array.isArray(seancesData?.seances) ? seancesData.seances : Array.isArray(seancesData) ? seancesData : []);
+      setProgrammes(Array.isArray(programmesData?.data) ? programmesData.data : Array.isArray(programmesData) ? programmesData.data : []);
     } catch (error) {
-      console.error('Erreur fetch:', error);
+      console.error('Erreur fetch:', error.message || error);
     } finally {
       setLoading(false);
     }
@@ -202,7 +200,10 @@ const Calendar = () => {
               </button>
             </div>
             
-            <button className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+            <button
+              onClick={() => setIsModalOpen(true)}
+              className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            >
               <Plus className="h-4 w-4 mr-2" />
               Nouvelle Séance
             </button>
@@ -425,6 +426,17 @@ const Calendar = () => {
           </div>
         )}
       </div>
+
+      {/* Modal de création de séance */}
+      <CreateSeanceModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        onSuccess={() => {
+          fetchData();
+          setIsModalOpen(false);
+        }}
+        selectedDate={selectedDate}
+      />
     </Layout>
   );
 };

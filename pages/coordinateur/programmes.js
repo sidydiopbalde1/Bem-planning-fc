@@ -1,14 +1,16 @@
-// pages/coordinateur/programmes.js
-import { useState, useEffect } from 'react';
+// pages/coordinateur/programmes.js (refactorisée)
+import { useState, useEffect, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
 import Layout from '../../components/layout.js';
 import PageTransition, { AnimatedCard } from '../../components/ui/PageTransition.js';
+import apiClient from '../../lib/api-client';
 import {
   BookOpen, Plus, Search, Edit2, Trash2, AlertCircle, Calendar,
-  TrendingUp, Clock, CheckCircle, XCircle, Eye
+  TrendingUp, Clock, Eye, X
 } from 'lucide-react';
+import Pagination from '../../components/ui/Pagination';
 
 export default function ProgrammesManagement() {
   const { data: session, status } = useSession();
@@ -18,10 +20,13 @@ export default function ProgrammesManagement() {
   const [stats, setStats] = useState({});
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [selectedProgramme, setSelectedProgramme] = useState(null);
+  const [page, setPage] = useState(1);
+  const [pagination, setPagination] = useState(null);
 
   useEffect(() => {
     if (status === 'unauthenticated') {
@@ -31,31 +36,47 @@ export default function ProgrammesManagement() {
     }
   }, [status, session, router]);
 
+  // Debounce searchTerm pour éviter les appels API à chaque caractère
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchTerm(searchTerm);
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
+
   useEffect(() => {
     if (status === 'authenticated' && ['COORDINATOR', 'ADMIN'].includes(session?.user?.role)) {
       fetchProgrammes();
     }
-  }, [status, session, searchTerm, statusFilter]);
+  }, [status, session, debouncedSearchTerm, statusFilter, page]);
+
+  // Reset page when filters change
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedSearchTerm, statusFilter]);
 
   const fetchProgrammes = async () => {
     try {
       setLoading(true);
-      const params = new URLSearchParams();
-      if (searchTerm) params.append('search', searchTerm);
-      if (statusFilter) params.append('status', statusFilter);
+      const params = { page, limit: 12 };
+      if (debouncedSearchTerm) params.search = debouncedSearchTerm;
+      if (statusFilter) params.status = statusFilter;
 
-      const response = await fetch(`/api/coordinateur/programmes?${params}`);
-      const data = await response.json();
-
-      if (response.ok) {
-        setProgrammes(data.programmes);
-        setStats(data.stats);
-      }
+      const data = await apiClient.coordinateur.getProgrammes(params);
+      setProgrammes(data.programmes || data);
+      setStats(data.stats || {});
+      setPagination(data.pagination || null);
     } catch (error) {
-      console.error('Erreur:', error);
+      console.error('Erreur:', error.message || error);
     } finally {
       setLoading(false);
     }
+  };
+
+  const handlePageChange = (newPage) => {
+    setPage(newPage);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const getStatusBadge = (status) => {
@@ -185,7 +206,7 @@ export default function ProgrammesManagement() {
           </div>
 
           {/* Liste des programmes */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 relative z-10">
             {programmes.map((programme) => (
               <AnimatedCard key={programme.id} delay={0.1}>
                 <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 hover:shadow-lg transition-shadow">
@@ -266,10 +287,23 @@ export default function ProgrammesManagement() {
               </p>
             </div>
           )}
+
+          {/* Pagination */}
+          {pagination && pagination.pages > 1 && (
+            <div className="mt-6">
+              <Pagination
+                pagination={pagination}
+                currentPage={page}
+                onPageChange={handlePageChange}
+              />
+            </div>
+          )}
         </div>
 
+        {/* CreateProgrammeModal - Z-INDEX: z-30/z-35 */}
         {showCreateModal && (
           <CreateProgrammeModal
+            isOpen={showCreateModal}
             onClose={() => setShowCreateModal(false)}
             onSuccess={() => {
               setShowCreateModal(false);
@@ -278,8 +312,10 @@ export default function ProgrammesManagement() {
           />
         )}
 
+        {/* EditProgrammeModal - Z-INDEX: z-30/z-35 */}
         {showEditModal && selectedProgramme && (
           <EditProgrammeModal
+            isOpen={showEditModal}
             programme={selectedProgramme}
             onClose={() => {
               setShowEditModal(false);
@@ -297,7 +333,11 @@ export default function ProgrammesManagement() {
   );
 }
 
-function CreateProgrammeModal({ onClose, onSuccess }) {
+/**
+ * CreateProgrammeModal Refactorisée
+ * Z-INDEX: Overlay z-30, Modal z-35
+ */
+function CreateProgrammeModal({ isOpen, onClose, onSuccess }) {
   const [formData, setFormData] = useState({
     code: '',
     name: '',
@@ -311,49 +351,65 @@ function CreateProgrammeModal({ onClose, onSuccess }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
+  useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = 'hidden';
+    }
+    return () => {
+      document.body.style.overflow = 'unset';
+    };
+  }, [isOpen]);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
 
     try {
       setLoading(true);
-      const response = await fetch('/api/coordinateur/programmes', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData)
-      });
-
-      const data = await response.json();
-
-      if (response.ok) {
-        onSuccess();
-      } else {
-        setError(data.error || 'Erreur lors de la création');
-      }
+      await apiClient.programmes.create(formData);
+      onSuccess();
     } catch (error) {
-      setError('Erreur réseau');
+      setError(error.message || 'Erreur lors de la création');
     } finally {
       setLoading(false);
     }
   };
 
+  if (!isOpen) return null;
+
   return (
-    <div className="fixed inset-0 bg-white bg-opacity-90 backdrop-blur-md z-50">
-      <div className="flex items-center justify-center min-h-screen px-4">
-        <div className="fixed inset-0" onClick={onClose}></div>
-        <div className="relative bg-white dark:bg-gray-800 rounded-lg shadow-2xl max-w-2xl w-full p-6 z-10" onClick={(e) => e.stopPropagation()}>
-          <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">
-            Créer un nouveau programme
-          </h3>
+    <>
+      {/* Overlay - z-30 */}
+      <div 
+        className="fixed inset-0 bg-black/50 z-30" 
+        onClick={onClose}
+      ></div>
+      
+      {/* Modal Container - z-35 */}
+      <div className="fixed inset-0 z-35 flex items-center justify-center p-4 pointer-events-none">
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto pointer-events-auto">
+          {/* Header */}
+          <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 sticky top-0 z-10">
+            <h3 className="text-lg font-medium text-gray-900 dark:text-white">
+              Créer un nouveau programme
+            </h3>
+            <button
+              onClick={onClose}
+              className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-1 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700"
+            >
+              <X className="h-6 w-6" />
+            </button>
+          </div>
 
-          {error && (
-            <div className="mb-4 p-3 bg-red-100 text-red-700 rounded flex items-center">
-              <AlertCircle className="w-5 h-5 mr-2" />
-              {error}
-            </div>
-          )}
+          {/* Form */}
+          <form onSubmit={handleSubmit} className="p-6 space-y-4">
+            {error && (
+              <div className="p-3 bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-200 rounded flex items-center">
+                <AlertCircle className="w-5 h-5 mr-2 flex-shrink-0" />
+                {error}
+              </div>
+            )}
 
-          <form onSubmit={handleSubmit} className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Code *</label>
@@ -362,7 +418,7 @@ function CreateProgrammeModal({ onClose, onSuccess }) {
                   required
                   value={formData.code}
                   onChange={(e) => setFormData({ ...formData, code: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
                   placeholder="Ex: INFO-L1"
                 />
               </div>
@@ -372,7 +428,7 @@ function CreateProgrammeModal({ onClose, onSuccess }) {
                   required
                   value={formData.niveau}
                   onChange={(e) => setFormData({ ...formData, niveau: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="L1">Licence 1</option>
                   <option value="L2">Licence 2</option>
@@ -390,7 +446,7 @@ function CreateProgrammeModal({ onClose, onSuccess }) {
                 required
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
                 placeholder="Ex: Informatique Générale"
               />
             </div>
@@ -400,7 +456,7 @@ function CreateProgrammeModal({ onClose, onSuccess }) {
               <textarea
                 value={formData.description}
                 onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
                 rows="3"
               />
             </div>
@@ -412,7 +468,7 @@ function CreateProgrammeModal({ onClose, onSuccess }) {
                   required
                   value={formData.semestre}
                   onChange={(e) => setFormData({ ...formData, semestre: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
                 >
                   {[1, 2, 3, 4, 5, 6].map(i => (
                     <option key={i} value={`SEMESTRE_${i}`}>Semestre {i}</option>
@@ -427,7 +483,7 @@ function CreateProgrammeModal({ onClose, onSuccess }) {
                   min="1"
                   value={formData.totalVHT}
                   onChange={(e) => setFormData({ ...formData, totalVHT: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
                   placeholder="Ex: 300"
                 />
               </div>
@@ -441,7 +497,7 @@ function CreateProgrammeModal({ onClose, onSuccess }) {
                   required
                   value={formData.dateDebut}
                   onChange={(e) => setFormData({ ...formData, dateDebut: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
                 />
               </div>
               <div>
@@ -451,12 +507,12 @@ function CreateProgrammeModal({ onClose, onSuccess }) {
                   required
                   value={formData.dateFin}
                   onChange={(e) => setFormData({ ...formData, dateFin: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
                 />
               </div>
             </div>
 
-            <div className="flex justify-end space-x-3 pt-4">
+            <div className="flex justify-end space-x-3 pt-4 border-t border-gray-200 dark:border-gray-700">
               <button
                 type="button"
                 onClick={onClose}
@@ -475,24 +531,37 @@ function CreateProgrammeModal({ onClose, onSuccess }) {
           </form>
         </div>
       </div>
-    </div>
+    </>
   );
 }
 
-function EditProgrammeModal({ programme, onClose, onSuccess }) {
+/**
+ * EditProgrammeModal Refactorisée
+ * Z-INDEX: Overlay z-30, Modal z-35
+ */
+function EditProgrammeModal({ isOpen, programme, onClose, onSuccess }) {
   const [formData, setFormData] = useState({
-    name: programme.name,
-    description: programme.description || '',
-    niveau: programme.niveau,
-    semestre: programme.semestre,
-    totalVHT: programme.totalVHT,
-    dateDebut: programme.dateDebut.split('T')[0],
-    dateFin: programme.dateFin.split('T')[0],
-    status: programme.status,
-    progression: programme.progression
+    name: programme?.name || '',
+    description: programme?.description || '',
+    niveau: programme?.niveau || 'L1',
+    semestre: programme?.semestre || 'SEMESTRE_1',
+    totalVHT: programme?.totalVHT || '',
+    dateDebut: programme?.dateDebut?.split('T')[0] || '',
+    dateFin: programme?.dateFin?.split('T')[0] || '',
+    status: programme?.status || 'PLANIFIE',
+    progression: programme?.progression || 0
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = 'hidden';
+    }
+    return () => {
+      document.body.style.overflow = 'unset';
+    };
+  }, [isOpen]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -500,43 +569,50 @@ function EditProgrammeModal({ programme, onClose, onSuccess }) {
 
     try {
       setLoading(true);
-      const response = await fetch(`/api/coordinateur/programmes/${programme.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData)
-      });
-
-      const data = await response.json();
-
-      if (response.ok) {
-        onSuccess();
-      } else {
-        setError(data.error || 'Erreur lors de la mise à jour');
-      }
+      await apiClient.programmes.update(programme.id, formData);
+      onSuccess();
     } catch (error) {
-      setError('Erreur réseau');
+      setError(error.message || 'Erreur lors de la mise à jour');
     } finally {
       setLoading(false);
     }
   };
 
+  if (!isOpen || !programme) return null;
+
   return (
-    <div className="fixed inset-0 bg-white bg-opacity-90 backdrop-blur-md z-50 overflow-y-auto">
-      <div className="flex items-center justify-center min-h-screen px-4">
-        <div className="fixed inset-0" onClick={onClose}></div>
-        <div className="relative bg-white dark:bg-gray-800 rounded-lg shadow-2xl max-w-2xl w-full p-6 z-10" onClick={(e) => e.stopPropagation()}>
-          <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">
-            Modifier le programme
-          </h3>
+    <>
+      {/* Overlay - z-30 */}
+      <div 
+        className="fixed inset-0 bg-black/50 z-30" 
+        onClick={onClose}
+      ></div>
+      
+      {/* Modal Container - z-35 */}
+      <div className="fixed inset-0 z-35 flex items-center justify-center p-4 pointer-events-none overflow-y-auto">
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto pointer-events-auto my-8">
+          {/* Header */}
+          <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 sticky top-0 z-10">
+            <h3 className="text-lg font-medium text-gray-900 dark:text-white">
+              Modifier le programme
+            </h3>
+            <button
+              onClick={onClose}
+              className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-1 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700"
+            >
+              <X className="h-6 w-6" />
+            </button>
+          </div>
 
-          {error && (
-            <div className="mb-4 p-3 bg-red-100 text-red-700 rounded flex items-center">
-              <AlertCircle className="w-5 h-5 mr-2" />
-              {error}
-            </div>
-          )}
+          {/* Form */}
+          <form onSubmit={handleSubmit} className="p-6 space-y-4">
+            {error && (
+              <div className="p-3 bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-200 rounded flex items-center">
+                <AlertCircle className="w-5 h-5 mr-2 flex-shrink-0" />
+                {error}
+              </div>
+            )}
 
-          <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Nom *</label>
               <input
@@ -544,7 +620,7 @@ function EditProgrammeModal({ programme, onClose, onSuccess }) {
                 required
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
               />
             </div>
 
@@ -555,7 +631,7 @@ function EditProgrammeModal({ programme, onClose, onSuccess }) {
                   required
                   value={formData.status}
                   onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="PLANIFIE">Planifié</option>
                   <option value="EN_COURS">En cours</option>
@@ -565,20 +641,79 @@ function EditProgrammeModal({ programme, onClose, onSuccess }) {
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Progression *</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Progression ({formData.progression}%)
+                </label>
                 <input
-                  type="number"
-                  required
+                  type="range"
                   min="0"
                   max="100"
                   value={formData.progression}
-                  onChange={(e) => setFormData({ ...formData, progression: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                  onChange={(e) => setFormData({ ...formData, progression: parseInt(e.target.value) })}
+                  className="w-full"
                 />
               </div>
             </div>
 
-            <div className="flex justify-end space-x-3 pt-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Description</label>
+              <textarea
+                value={formData.description}
+                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+                rows="3"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Niveau</label>
+                <select
+                  value={formData.niveau}
+                  onChange={(e) => setFormData({ ...formData, niveau: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="L1">Licence 1</option>
+                  <option value="L2">Licence 2</option>
+                  <option value="L3">Licence 3</option>
+                  <option value="M1">Master 1</option>
+                  <option value="M2">Master 2</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">VHT Total</label>
+                <input
+                  type="number"
+                  min="1"
+                  value={formData.totalVHT}
+                  onChange={(e) => setFormData({ ...formData, totalVHT: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Date début</label>
+                <input
+                  type="date"
+                  value={formData.dateDebut}
+                  onChange={(e) => setFormData({ ...formData, dateDebut: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Date fin</label>
+                <input
+                  type="date"
+                  value={formData.dateFin}
+                  onChange={(e) => setFormData({ ...formData, dateFin: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end space-x-3 pt-4 border-t border-gray-200 dark:border-gray-700">
               <button
                 type="button"
                 onClick={onClose}
@@ -597,6 +732,6 @@ function EditProgrammeModal({ programme, onClose, onSuccess }) {
           </form>
         </div>
       </div>
-    </div>
+    </>
   );
 }

@@ -7,12 +7,14 @@ import Layout from '../../components/layout';
 import CreateProgrammeModal from '../../components/modals/CreateProgrammeModal';
 import ImportExcelModal from '../../components/modals/ImportExcelModal';
 import PageTransition, { AnimatedCard, AnimatedButton, AnimatedStats, SlideIn, FadeIn } from '../../components/ui/PageTransition';
+import Pagination from '../../components/ui/Pagination';
+import apiClient from '../../lib/api-client';
 import {
   BookOpen,
   Plus,
   Search,
   Filter,
-  Edit,
+  Edit as EditIcon,
   Trash2,
   Eye,
   Calendar,
@@ -31,16 +33,27 @@ export default function ProgrammesPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
   const [programmes, setProgrammes] = useState([]);
-  const [filteredProgrammes, setFilteredProgrammes] = useState([]);
+  const [pagination, setPagination] = useState({});
   const [loading, setLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
   const [filterSemestre, setFilterSemestre] = useState('all');
   const [filterNiveau, setFilterNiveau] = useState('all');
   const [sortBy, setSortBy] = useState('recent');
   const [selectedProgramme, setSelectedProgramme] = useState(null);
+  const [page, setPage] = useState(1);
+
+  // Debounce search
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchTerm(searchTerm);
+      setPage(1);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
 
   useEffect(() => {
     if (status === 'unauthenticated') {
@@ -51,76 +64,51 @@ export default function ProgrammesPage() {
     if (status === 'authenticated') {
       fetchProgrammes();
     }
-  }, [status, router]);
-
-  useEffect(() => {
-    filterProgrammes();
-  }, [programmes, searchTerm, filterStatus, filterSemestre, filterNiveau, sortBy]);
+  }, [status, router, debouncedSearchTerm, filterStatus, filterSemestre, page]);
 
   const fetchProgrammes = async () => {
     try {
-      const response = await fetch('/api/programmes');
-      const data = await response.json();
+      setLoading(true);
+      const sortMapping = {
+        'recent': { sortBy: 'createdAt', sortOrder: 'desc' },
+        'name': { sortBy: 'name', sortOrder: 'asc' },
+        'code': { sortBy: 'code', sortOrder: 'asc' },
+        'date': { sortBy: 'dateDebut', sortOrder: 'asc' }
+      };
 
-      if (response.ok) {
-        setProgrammes(data.programmes);
-      } else {
-        console.error('Erreur:', data.error);
-      }
+      const params = {
+        page,
+        limit: 12,
+        ...(debouncedSearchTerm && { search: debouncedSearchTerm }),
+        ...(filterStatus !== 'all' && { status: filterStatus }),
+        ...(filterSemestre !== 'all' && { semestre: filterSemestre }),
+        ...sortMapping[sortBy]
+      };
+
+      const response = await apiClient.programmes.getAll(params);
+      const programmesArray = response.data || response.programmes || response;
+      setProgrammes(Array.isArray(programmesArray) ? programmesArray : []);
+      setPagination(response?.pagination || {});
     } catch (error) {
-      console.error('Erreur fetch:', error);
+      console.error('Erreur fetch:', error.message || error);
+      setProgrammes([]);
     } finally {
       setLoading(false);
     }
   };
 
-  const filterProgrammes = () => {
-    let filtered = [...programmes];
-
-    if (searchTerm) {
-      filtered = filtered.filter(prog =>
-        prog.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        prog.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (prog.description && prog.description.toLowerCase().includes(searchTerm.toLowerCase()))
-      );
-    }
-
-    if (filterStatus !== 'all') {
-      filtered = filtered.filter(prog => prog.status === filterStatus);
-    }
-
-    if (filterSemestre !== 'all') {
-      filtered = filtered.filter(prog => prog.semestre === filterSemestre);
-    }
-
-    if (filterNiveau !== 'all') {
-      filtered = filtered.filter(prog => prog.niveau === filterNiveau);
-    }
-
-    filtered.sort((a, b) => {
-      switch (sortBy) {
-        case 'name':
-          return a.name.localeCompare(b.name);
-        case 'code':
-          return a.code.localeCompare(b.code);
-        case 'date':
-          return new Date(a.dateDebut) - new Date(b.dateDebut);
-        case 'recent':
-        default:
-          return new Date(b.updatedAt) - new Date(a.updatedAt);
-      }
-    });
-
-    setFilteredProgrammes(filtered);
-  };
+  // Filter client-side for niveau (not yet in backend)
+  const filteredProgrammes = programmes.filter(prog => {
+    if (filterNiveau !== 'all' && prog.niveau !== filterNiveau) return false;
+    return true;
+  });
 
   const handleCreateSuccess = (newProgramme) => {
     setProgrammes(prev => [newProgramme, ...prev]);
     setShowCreateModal(false);
   };
 
-  const handleImportSuccess = (data) => {
-    // Rafraîchir la liste des programmes après l'importation
+  const handleImportSuccess = () => {
     fetchProgrammes();
     setShowImportModal(false);
   };
@@ -131,18 +119,10 @@ export default function ProgrammesPage() {
     }
 
     try {
-      const response = await fetch(`/api/programmes/${programmeId}`, {
-        method: 'DELETE',
-      });
-
-      if (response.ok) {
-        setProgrammes(prev => prev.filter(p => p.id !== programmeId));
-      } else {
-        const data = await response.json();
-        alert(data.error || 'Erreur lors de la suppression');
-      }
+      await apiClient.programmes.delete(programmeId);
+      setProgrammes(prev => prev.filter(p => p.id !== programmeId));
     } catch (error) {
-      alert('Erreur de connexion');
+      alert(error.message || 'Erreur lors de la suppression');
     }
   };
 
@@ -202,7 +182,7 @@ export default function ProgrammesPage() {
   const statsData = [
     {
       icon: <BookOpen className="w-6 h-6" />,
-      value: programmes.length,
+      value: pagination.total || programmes.length,
       label: 'Total programmes',
       color: 'bg-red-100 text-red-600',
     },
@@ -433,7 +413,7 @@ export default function ProgrammesPage() {
                                   className="flex items-center px-4 py-3 text-sm font-semibold text-gray-700 hover:bg-green-50 hover:text-green-600 transition-colors"
                                   onClick={() => setSelectedProgramme(null)}
                                 >
-                                  <Edit className="h-4 w-4 mr-3" />
+                                  <EditIcon className="h-4 w-4 mr-3" />
                                   Modifier
                                 </Link>
                                 <Link
@@ -549,6 +529,19 @@ export default function ProgrammesPage() {
               );
             })}
           </div>
+        )}
+
+        {/* Pagination */}
+        {pagination.pages > 1 && (
+          <FadeIn delay={500}>
+            <div className="bg-white rounded-xl border-2 border-gray-200 shadow-md overflow-hidden">
+              <Pagination
+                pagination={pagination}
+                currentPage={page}
+                onPageChange={setPage}
+              />
+            </div>
+          </FadeIn>
         )}
       </div>
 

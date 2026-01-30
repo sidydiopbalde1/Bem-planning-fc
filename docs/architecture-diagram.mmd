@@ -1,0 +1,96 @@
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#4f46e5', 'primaryTextColor': '#fff', 'primaryBorderColor': '#3730a3', 'lineColor': '#6366f1', 'secondaryColor': '#f0fdf4', 'tertiaryColor': '#fef3c7'}}}%%
+flowchart TB
+    subgraph CLIENT["CLIENT - Browser"]
+        direction TB
+        REACT["React 19<br/>Components & Hooks"]
+        TAILWIND["Tailwind CSS<br/>Styling"]
+        I18N["i18n<br/>Multi-langue"]
+    end
+
+    subgraph FRONTEND["FRONTEND - Next.js 15"]
+        direction TB
+        subgraph PAGES["Pages Router"]
+            AUTH_P["Auth<br/>/signin"]
+            ADMIN_P["Admin<br/>/admin/*"]
+            COORD_P["Coordinateur<br/>/coordinateur/*"]
+            PUBLIC_P["Public<br/>/programmes<br/>/modules<br/>/calendar"]
+        end
+        subgraph COMPONENTS["Components"]
+            LAYOUT["Layout<br/>Sidebar + Header"]
+            MODALS["Modals<br/>CRUD Forms"]
+            TABLES["Tables<br/>Animated + Paginated"]
+            STATS["Statistics<br/>Charts + Cards"]
+        end
+        API_CLIENT["API Client<br/>lib/api-client.js"]
+    end
+
+    subgraph API_LAYER["API LAYER - Next.js Routes"]
+        direction TB
+        subgraph MIDDLEWARE["Middleware"]
+            AUTH_MW["Auth Check<br/>NextAuth.js"]
+            ROLE_MW["Role Check<br/>RBAC"]
+            LOG_MW["Activity Logger"]
+        end
+        subgraph ENDPOINTS["REST Endpoints"]
+            E_AUTH["/api/auth/*"]
+            E_ADMIN["/api/admin/*"]
+            E_RES["/api/programmes<br/>/api/modules<br/>/api/seances<br/>/api/intervenants"]
+            E_COORD["/api/coordinateur/*"]
+        end
+    end
+
+    subgraph NESTJS_LAYER["BACKEND - NestJS"]
+        direction TB
+        subgraph NEST_CORE["Core"]
+            GUARDS["Guards<br/>JWT + Roles"]
+            PIPES["Validation Pipes<br/>Zod / class-validator"]
+        end
+        subgraph NEST_MODULES["Modules"]
+            M_AUTH["AuthModule"]
+            M_USERS["UsersModule"]
+            M_PROG["ProgrammesModule"]
+            M_MOD["ModulesModule"]
+            M_SEAN["SeancesModule"]
+            M_INT["IntervenantsModule"]
+            M_CONF["ConflitsModule"]
+            M_EVAL["EvaluationsModule"]
+        end
+        subgraph NEST_SERVICES["Services"]
+            S_CONFLICT["ConflictDetection<br/>Service"]
+            S_PLANNING["PlanningGenerator<br/>Service"]
+            S_NOTIF["Notification<br/>Service"]
+        end
+    end
+
+    subgraph DATA_LAYER["DATA LAYER"]
+        direction TB
+        PRISMA["Prisma ORM<br/>Schema & Client"]
+        PG[("PostgreSQL<br/>Database")]
+    end
+
+    subgraph INFRA["INFRASTRUCTURE"]
+        direction LR
+        DOCKER["Docker<br/>Containers"]
+        NGINX["Nginx<br/>Reverse Proxy"]
+        GITHUB["GitHub Actions<br/>CI/CD"]
+    end
+
+    %% Connections
+    CLIENT <-->|HTTP| FRONTEND
+    FRONTEND <-->|REST API| API_LAYER
+    API_LAYER <-->|Prisma| DATA_LAYER
+
+    FRONTEND <-.->|"Migration"| NESTJS_LAYER
+    NESTJS_LAYER <-->|Prisma| DATA_LAYER
+
+    INFRA -.-> FRONTEND
+    INFRA -.-> NESTJS_LAYER
+    INFRA -.-> DATA_LAYER
+
+    %% Styling
+    style CLIENT fill:#dbeafe,stroke:#3b82f6,stroke-width:2px
+    style FRONTEND fill:#fef3c7,stroke:#f59e0b,stroke-width:2px
+    style API_LAYER fill:#f3e8ff,stroke:#a855f7,stroke-width:2px
+    style NESTJS_LAYER fill:#dcfce7,stroke:#22c55e,stroke-width:2px
+    style DATA_LAYER fill:#fee2e2,stroke:#ef4444,stroke-width:2px
+    style INFRA fill:#f1f5f9,stroke:#64748b,stroke-width:2px

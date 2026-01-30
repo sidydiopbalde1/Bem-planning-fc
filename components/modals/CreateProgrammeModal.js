@@ -1,6 +1,7 @@
-// components/modals/CreateProgrammeModal.js - Version corrigée
-import { useState } from 'react';
-import { X, Save, AlertCircle, Calendar, Clock, BookOpen, Hash } from 'lucide-react';
+// components/modals/CreateProgrammeModal.js
+import { useState, useEffect } from 'react';
+import { X, Save, BookOpen, Calendar, Clock, Hash, AlertCircle } from 'lucide-react';
+import apiClient from '../../lib/api-client';
 
 const CreateProgrammeModal = ({ isOpen, onClose, onSuccess }) => {
   const [formData, setFormData] = useState({
@@ -14,6 +15,7 @@ const CreateProgrammeModal = ({ isOpen, onClose, onSuccess }) => {
     totalVHT: '',
     status: 'PLANIFIE'
   });
+
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
 
@@ -39,6 +41,16 @@ const CreateProgrammeModal = ({ isOpen, onClose, onSuccess }) => {
     { value: 'EN_COURS', label: 'En cours' },
     { value: 'SUSPENDU', label: 'Suspendu' }
   ];
+
+  // Gestion du scroll du body quand modal ouvert
+  useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = 'hidden';
+    }
+    return () => {
+      document.body.style.overflow = 'unset';
+    };
+  }, [isOpen]);
 
   const validateForm = () => {
     const newErrors = {};
@@ -83,52 +95,40 @@ const CreateProgrammeModal = ({ isOpen, onClose, onSuccess }) => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
+
     if (!validateForm()) {
       return;
     }
 
     setLoading(true);
     try {
-      const response = await fetch('/api/programmes/create', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          ...formData,
-          totalVHT: parseInt(formData.totalVHT),
-          dateDebut: new Date(formData.dateDebut).toISOString(),
-          dateFin: new Date(formData.dateFin).toISOString()
-        }),
+      const data = await apiClient.programmes.create({
+        ...formData,
+        totalVHT: parseInt(formData.totalVHT),
+        dateDebut: new Date(formData.dateDebut).toISOString(),
+        dateFin: new Date(formData.dateFin).toISOString()
       });
 
-      const data = await response.json();
-
-      if (response.ok) {
-        onSuccess && onSuccess(data.programme);
-        onClose();
-        // Reset form
-        setFormData({
-          name: '',
-          code: '',
-          description: '',
-          semestre: '',
-          niveau: '',
-          dateDebut: '',
-          dateFin: '',
-          totalVHT: '',
-          status: 'PLANIFIE'
-        });
-      } else {
-        if (data.errors) {
-          setErrors(data.errors);
-        } else {
-          setErrors({ general: data.error || 'Erreur lors de la création du programme' });
-        }
-      }
+      onSuccess && onSuccess(data.programme || data);
+      onClose();
+      // Reset form
+      setFormData({
+        name: '',
+        code: '',
+        description: '',
+        semestre: '',
+        niveau: '',
+        dateDebut: '',
+        dateFin: '',
+        totalVHT: '',
+        status: 'PLANIFIE'
+      });
     } catch (error) {
-      setErrors({ general: 'Erreur de connexion. Veuillez réessayer.' });
+      if (error.errors) {
+        setErrors(error.errors);
+      } else {
+        setErrors({ general: error.message || 'Erreur lors de la création du programme' });
+      }
     } finally {
       setLoading(false);
     }
@@ -136,7 +136,6 @@ const CreateProgrammeModal = ({ isOpen, onClose, onSuccess }) => {
 
   const handleChange = (field, value) => {
     setFormData(prev => ({ ...prev, [field]: value }));
-    // Clear error when user starts typing
     if (errors[field]) {
       setErrors(prev => ({ ...prev, [field]: null }));
     }
@@ -146,12 +145,15 @@ const CreateProgrammeModal = ({ isOpen, onClose, onSuccess }) => {
 
   return (
     <>
-      {/* Overlay - Fond sombre */}
-      <div className="fixed inset-0 bg-grey bg-opacity-1 backdrop-blur-sm z-40" onClick={onClose}></div>
-      
-      {/* Modal Container */}
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-        <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+      {/* Overlay - z-30 (derrière le modal, visible) */}
+      <div 
+        className="fixed inset-0 bg-black/50 z-30" 
+        onClick={onClose}
+      ></div>
+
+      {/* Modal Container - z-35 (au-dessus de overlay, derrière le reste) */}
+      <div className="fixed inset-0 z-35 flex items-center justify-center p-4 pointer-events-none">
+        <div className="bg-white rounded-lg shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto pointer-events-auto">
           {/* Header */}
           <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-white sticky top-0 z-10 rounded-t-lg">
             <div className="flex items-center space-x-2">
@@ -180,193 +182,200 @@ const CreateProgrammeModal = ({ isOpen, onClose, onSuccess }) => {
 
             <div className="space-y-6">
               {/* Informations de base */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Nom du programme *
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.name}
-                    onChange={(e) => handleChange('name', e.target.value)}
-                    className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors ${
-                      errors.name ? 'border-red-300 bg-red-50' : 'border-gray-300'
-                    }`}
-                    placeholder="Ex: Introduction au Marketing Digital"
-                  />
-                  {errors.name && (
-                    <p className="mt-1 text-xs text-red-600">{errors.name}</p>
-                  )}
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Code du programme *
-                  </label>
-                  <div className="relative">
-                    <Hash className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
+              <div>
+                <h4 className="text-sm font-medium text-gray-900 mb-3">Informations de base</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Nom du programme *
+                    </label>
                     <input
                       type="text"
-                      value={formData.code}
-                      onChange={(e) => handleChange('code', e.target.value.toUpperCase())}
-                      className={`w-full pl-10 pr-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors ${
-                        errors.code ? 'border-red-300 bg-red-50' : 'border-gray-300'
+                      value={formData.name}
+                      onChange={(e) => handleChange('name', e.target.value)}
+                      className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors ${
+                        errors.name ? 'border-red-300 bg-red-50' : 'border-gray-300'
                       }`}
-                      placeholder="Ex: MKT-101"
+                      placeholder="Ex: Introduction au Marketing Digital"
                     />
+                    {errors.name && (
+                      <p className="mt-1 text-xs text-red-600">{errors.name}</p>
+                    )}
                   </div>
-                  {errors.code && (
-                    <p className="mt-1 text-xs text-red-600">{errors.code}</p>
-                  )}
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Code du programme *
+                    </label>
+                    <div className="relative">
+                      <Hash className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
+                      <input
+                        type="text"
+                        value={formData.code}
+                        onChange={(e) => handleChange('code', e.target.value.toUpperCase())}
+                        className={`w-full pl-10 pr-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors ${
+                          errors.code ? 'border-red-300 bg-red-50' : 'border-gray-300'
+                        }`}
+                        placeholder="Ex: MKT-101"
+                      />
+                    </div>
+                    {errors.code && (
+                      <p className="mt-1 text-xs text-red-600">{errors.code}</p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="mt-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Description
+                  </label>
+                  <textarea
+                    value={formData.description}
+                    onChange={(e) => handleChange('description', e.target.value)}
+                    rows={3}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors"
+                    placeholder="Description détaillée du programme de formation..."
+                  />
                 </div>
               </div>
 
-              {/* Description */}
+              {/* Classification */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Description
-                </label>
-                <textarea
-                  value={formData.description}
-                  onChange={(e) => handleChange('description', e.target.value)}
-                  rows={3}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors"
-                  placeholder="Description détaillée du programme de formation..."
-                />
-              </div>
+                <h4 className="text-sm font-medium text-gray-900 mb-3">Classification</h4>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Semestre *
+                    </label>
+                    <select
+                      value={formData.semestre}
+                      onChange={(e) => handleChange('semestre', e.target.value)}
+                      className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors bg-white ${
+                        errors.semestre ? 'border-red-300 bg-red-50' : 'border-gray-300'
+                      }`}
+                    >
+                      <option value="">Sélectionner...</option>
+                      {semestreOptions.map(option => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                    {errors.semestre && (
+                      <p className="mt-1 text-xs text-red-600">{errors.semestre}</p>
+                    )}
+                  </div>
 
-              {/* Semestre et Niveau */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Semestre *
-                  </label>
-                  <select
-                    value={formData.semestre}
-                    onChange={(e) => handleChange('semestre', e.target.value)}
-                    className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors bg-white ${
-                      errors.semestre ? 'border-red-300 bg-red-50' : 'border-gray-300'
-                    }`}
-                  >
-                    <option value="">Sélectionner...</option>
-                    {semestreOptions.map(option => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                  {errors.semestre && (
-                    <p className="mt-1 text-xs text-red-600">{errors.semestre}</p>
-                  )}
-                </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Niveau *
+                    </label>
+                    <select
+                      value={formData.niveau}
+                      onChange={(e) => handleChange('niveau', e.target.value)}
+                      className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors bg-white ${
+                        errors.niveau ? 'border-red-300 bg-red-50' : 'border-gray-300'
+                      }`}
+                    >
+                      <option value="">Sélectionner...</option>
+                      {niveauOptions.map(option => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                    {errors.niveau && (
+                      <p className="mt-1 text-xs text-red-600">{errors.niveau}</p>
+                    )}
+                  </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Niveau *
-                  </label>
-                  <select
-                    value={formData.niveau}
-                    onChange={(e) => handleChange('niveau', e.target.value)}
-                    className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors bg-white ${
-                      errors.niveau ? 'border-red-300 bg-red-50' : 'border-gray-300'
-                    }`}
-                  >
-                    <option value="">Sélectionner...</option>
-                    {niveauOptions.map(option => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                  {errors.niveau && (
-                    <p className="mt-1 text-xs text-red-600">{errors.niveau}</p>
-                  )}
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Statut
-                  </label>
-                  <select
-                    value={formData.status}
-                    onChange={(e) => handleChange('status', e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors bg-white"
-                  >
-                    {statusOptions.map(option => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Statut
+                    </label>
+                    <select
+                      value={formData.status}
+                      onChange={(e) => handleChange('status', e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors bg-white"
+                    >
+                      {statusOptions.map(option => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
               </div>
 
-              {/* Dates */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Date de début *
-                  </label>
-                  <div className="relative">
-                    <Calendar className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
-                    <input
-                      type="date"
-                      value={formData.dateDebut}
-                      onChange={(e) => handleChange('dateDebut', e.target.value)}
-                      className={`w-full pl-10 pr-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors ${
-                        errors.dateDebut ? 'border-red-300 bg-red-50' : 'border-gray-300'
-                      }`}
-                    />
+              {/* Planification */}
+              <div>
+                <h4 className="text-sm font-medium text-gray-900 mb-3">Planification</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Date de début *
+                    </label>
+                    <div className="relative">
+                      <Calendar className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
+                      <input
+                        type="date"
+                        value={formData.dateDebut}
+                        onChange={(e) => handleChange('dateDebut', e.target.value)}
+                        className={`w-full pl-10 pr-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors ${
+                          errors.dateDebut ? 'border-red-300 bg-red-50' : 'border-gray-300'
+                        }`}
+                      />
+                    </div>
+                    {errors.dateDebut && (
+                      <p className="mt-1 text-xs text-red-600">{errors.dateDebut}</p>
+                    )}
                   </div>
-                  {errors.dateDebut && (
-                    <p className="mt-1 text-xs text-red-600">{errors.dateDebut}</p>
-                  )}
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Date de fin *
+                    </label>
+                    <div className="relative">
+                      <Calendar className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
+                      <input
+                        type="date"
+                        value={formData.dateFin}
+                        onChange={(e) => handleChange('dateFin', e.target.value)}
+                        className={`w-full pl-10 pr-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors ${
+                          errors.dateFin ? 'border-red-300 bg-red-50' : 'border-gray-300'
+                        }`}
+                      />
+                    </div>
+                    {errors.dateFin && (
+                      <p className="mt-1 text-xs text-red-600">{errors.dateFin}</p>
+                    )}
+                  </div>
                 </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Date de fin *
-                  </label>
-                  <div className="relative">
-                    <Calendar className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
-                    <input
-                      type="date"
-                      value={formData.dateFin}
-                      onChange={(e) => handleChange('dateFin', e.target.value)}
-                      className={`w-full pl-10 pr-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors ${
-                        errors.dateFin ? 'border-red-300 bg-red-50' : 'border-gray-300'
-                      }`}
-                    />
+                <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Volume horaire total (VHT) *
+                    </label>
+                    <div className="relative">
+                      <Clock className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
+                      <input
+                        type="number"
+                        min="1"
+                        value={formData.totalVHT}
+                        onChange={(e) => handleChange('totalVHT', e.target.value)}
+                        className={`w-full pl-10 pr-16 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors ${
+                          errors.totalVHT ? 'border-red-300 bg-red-50' : 'border-gray-300'
+                        }`}
+                        placeholder="120"
+                      />
+                      <div className="absolute right-3 top-2.5 text-sm text-gray-500">heures</div>
+                    </div>
+                    {errors.totalVHT && (
+                      <p className="mt-1 text-xs text-red-600">{errors.totalVHT}</p>
+                    )}
                   </div>
-                  {errors.dateFin && (
-                    <p className="mt-1 text-xs text-red-600">{errors.dateFin}</p>
-                  )}
-                </div>
-              </div>
-
-              {/* Volume horaire */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Volume horaire total (VHT) *
-                  </label>
-                  <div className="relative">
-                    <Clock className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
-                    <input
-                      type="number"
-                      min="1"
-                      value={formData.totalVHT}
-                      onChange={(e) => handleChange('totalVHT', e.target.value)}
-                      className={`w-full pl-10 pr-16 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors ${
-                        errors.totalVHT ? 'border-red-300 bg-red-50' : 'border-gray-300'
-                      }`}
-                      placeholder="120"
-                    />
-                    <div className="absolute right-3 top-2.5 text-sm text-gray-500">heures</div>
-                  </div>
-                  {errors.totalVHT && (
-                    <p className="mt-1 text-xs text-red-600">{errors.totalVHT}</p>
-                  )}
                 </div>
               </div>
             </div>

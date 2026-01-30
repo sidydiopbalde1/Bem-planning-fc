@@ -5,10 +5,12 @@ import { useRouter } from 'next/router';
 import Head from 'next/head';
 import Layout from '../../components/layout.js';
 import PageTransition, { AnimatedCard, SlideIn } from '../../components/ui/PageTransition.js';
+import Pagination from '../../components/ui/Pagination';
 import {
   DoorClosed, Plus, Search, Filter, Edit2, Trash2,
   Building, Users, CheckCircle, XCircle, AlertCircle, Package
 } from 'lucide-react';
+import apiClient from '../../lib/api-client';
 
 export default function SallesManagement() {
   const { data: session, status } = useSession();
@@ -25,6 +27,8 @@ export default function SallesManagement() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [selectedSalle, setSelectedSalle] = useState(null);
   const [actionLoading, setActionLoading] = useState(false);
+  const [page, setPage] = useState(1);
+  const [pagination, setPagination] = useState(null);
 
   // Debounce pour la recherche
   useEffect(() => {
@@ -49,30 +53,44 @@ export default function SallesManagement() {
     if (status === 'authenticated' && session?.user?.role === 'ADMIN') {
       fetchSalles();
     }
-  }, [status, session, debouncedSearchTerm, batimentFilter, disponibleFilter]);
+  }, [status, session, debouncedSearchTerm, batimentFilter, disponibleFilter, page]);
+
+  // Reset page when filters change
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedSearchTerm, batimentFilter, disponibleFilter]);
 
   const fetchSalles = async () => {
     try {
       setLoading(true);
-      const params = new URLSearchParams();
-      if (debouncedSearchTerm) params.append('search', debouncedSearchTerm);
-      if (batimentFilter) params.append('batiment', batimentFilter);
-      if (disponibleFilter) params.append('disponible', disponibleFilter);
-
-      const response = await fetch(`/api/admin/salles?${params}`);
-      const data = await response.json();
-
-      if (response.ok) {
-        setSalles(data.salles);
-        setStats(data.stats);
-      } else {
-        console.error('Erreur:', data.error);
+      if (session?.accessToken) {
+        apiClient.setToken(session.accessToken);
       }
+
+      const params = { page, limit: 12 };
+      if (debouncedSearchTerm) params.search = debouncedSearchTerm;
+      if (batimentFilter) params.batiment = batimentFilter;
+      if (disponibleFilter) {
+        console.log('Filtre disponibilité:', disponibleFilter);
+        params.disponible = disponibleFilter;
+      }
+
+      const data = await apiClient.admin.getSalles(params);
+      console.log('Données des salles:', data);
+      setSalles(data.data || []);
+      setStats(data.stats || {});
+      setPagination(data.pagination || null);
+
     } catch (error) {
       console.error('Erreur lors du chargement des salles:', error);
     } finally {
       setLoading(false);
     }
+  };
+
+  const handlePageChange = (newPage) => {
+    setPage(newPage);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleDeleteSalle = async (salleId) => {
@@ -82,21 +100,16 @@ export default function SallesManagement() {
 
     try {
       setActionLoading(true);
-      const response = await fetch(`/api/admin/salles/${salleId}`, {
-        method: 'DELETE'
-      });
-
-      const data = await response.json();
-
-      if (response.ok) {
-        setSalles(salles.filter(s => s.id !== salleId));
-        alert('Salle supprimée avec succès');
-      } else {
-        alert(data.message || data.error || 'Erreur lors de la suppression');
+      if (session?.accessToken) {
+        apiClient.setToken(session.accessToken);
       }
+
+      await apiClient.admin.deleteSalle(salleId);
+      setSalles(salles.filter(s => s.id !== salleId));
+      alert('Salle supprimée avec succès');
     } catch (error) {
       console.error('Erreur:', error);
-      alert('Erreur lors de la suppression');
+      alert(error.message || 'Erreur lors de la suppression');
     } finally {
       setActionLoading(false);
     }
@@ -112,7 +125,7 @@ export default function SallesManagement() {
     );
   }
 
-  const batiments = stats.batiments || [];
+  const batiments = Object.entries(stats.parBatiment || {}).map(([nom, count]) => ({ nom, count }));
 
   return (
     <PageTransition>
@@ -180,7 +193,7 @@ export default function SallesManagement() {
                   <div>
                     <p className="text-sm text-gray-600 dark:text-gray-400">Occupées</p>
                     <p className="text-2xl font-bold text-red-600">
-                      {stats.occupees || 0}
+                      {stats.total - stats.disponibles || 0}
                     </p>
                   </div>
                   <XCircle className="w-10 h-10 text-red-400" />
@@ -341,6 +354,15 @@ export default function SallesManagement() {
                   </div>
                 )}
               </div>
+
+              {/* Pagination */}
+              {pagination && pagination.pages > 1 && (
+                <Pagination
+                  pagination={pagination}
+                  currentPage={page}
+                  onPageChange={handlePageChange}
+                />
+              )}
             </div>
           </AnimatedCard>
         </div>
@@ -398,21 +420,13 @@ function CreateSalleModal({ onClose, onSuccess }) {
 
     try {
       setLoading(true);
-      const response = await fetch('/api/admin/salles', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData)
+      await apiClient.admin.createSalle({
+        ...formData,
+        capacite: parseInt(formData.capacite, 10)
       });
-
-      const data = await response.json();
-
-      if (response.ok) {
-        onSuccess();
-      } else {
-        setError(data.error || 'Erreur lors de la création');
-      }
+      onSuccess();
     } catch (error) {
-      setError('Erreur réseau');
+      setError(error.message || 'Erreur lors de la création');
     } finally {
       setLoading(false);
     }
@@ -421,11 +435,11 @@ function CreateSalleModal({ onClose, onSuccess }) {
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto">
       <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
-        <div className="fixed inset-0 bg-gray-500 bg-opacity-75 z-40" onClick={onClose}></div>
+        <div className="fixed inset-0 bg-black/50 z-30" onClick={onClose}></div>
 
         <span className="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
 
-        <div className="inline-block align-bottom bg-white dark:bg-gray-800 rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full"
+        <div className="relative z-50 inline-block align-bottom bg-white dark:bg-gray-800 rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full"
           onClick={(e) => e.stopPropagation()}
         >
           <form onSubmit={handleSubmit}>
@@ -557,21 +571,13 @@ function EditSalleModal({ salle, onClose, onSuccess }) {
 
     try {
       setLoading(true);
-      const response = await fetch(`/api/admin/salles/${salle.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData)
+      await apiClient.admin.updateSalle(salle.id, {
+        ...formData,
+        capacite: parseInt(formData.capacite, 10)
       });
-
-      const data = await response.json();
-
-      if (response.ok) {
-        onSuccess();
-      } else {
-        setError(data.error || 'Erreur lors de la mise à jour');
-      }
+      onSuccess();
     } catch (error) {
-      setError('Erreur réseau');
+      setError(error.message || 'Erreur lors de la mise à jour');
     } finally {
       setLoading(false);
     }
@@ -580,11 +586,11 @@ function EditSalleModal({ salle, onClose, onSuccess }) {
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto">
       <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
-        <div className="fixed inset-0 bg-gray-500 bg-opacity-75" onClick={onClose}></div>
+        <div className="fixed inset-0 bg-black/50 z-30" onClick={onClose}></div>
 
         <span className="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
 
-        <div className="inline-block align-bottom bg-white dark:bg-gray-800 rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full"
+        <div className="relative z-50 inline-block align-bottom bg-white dark:bg-gray-800 rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full"
           onClick={(e) => e.stopPropagation()}
         >
           <form onSubmit={handleSubmit}>

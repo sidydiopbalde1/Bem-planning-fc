@@ -2,18 +2,18 @@
 import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/router';
-import { getServerSession } from 'next-auth/next';
-import { authOptions } from '../api/auth/[...nextauth]';
 import Head from 'next/head';
 import Layout from '../../components/layout.js';
 import CreateIntervenantModal from '../../components/modals/CreateIntervenantModal.js';
 import ImportExcelModal from '../../components/modals/ImportExcelModal';
+import Pagination from '../../components/ui/Pagination';
+import apiClient from '../../lib/api-client';
 import {
   Users,
   Plus,
   Search,
   Filter,
-  Edit,
+  Edit as EditIcon,
   Trash2,
   Mail,
   Phone,
@@ -32,12 +32,24 @@ export default function IntervenantsPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
   const [intervenants, setIntervenants] = useState([]);
-  const [filteredIntervenants, setFilteredIntervenants] = useState([]);
+  const [pagination, setPagination] = useState({});
+  const [stats, setStats] = useState({ total: 0, disponibles: 0, indisponibles: 0, professeurs: 0 });
   const [loading, setLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
   const [filterGrade, setFilterGrade] = useState('all');
+  const [page, setPage] = useState(1);
+
+  // Debounce search
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchTerm(searchTerm);
+      setPage(1);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
 
   useEffect(() => {
     if (status === 'unauthenticated') {
@@ -46,59 +58,60 @@ export default function IntervenantsPage() {
     }
 
     if (status === 'authenticated') {
-      fetchIntervenants();
+      // Bloquer l'accès aux TEACHER (intervenants)
+      if (session?.user?.role === 'TEACHER') {
+        router.push('/intervenant/mes-seances');
+        return;
+      }
+      if (session?.accessToken) {
+        apiClient.setToken(session.accessToken);
+        fetchIntervenants();
+      }
     }
-  }, [status, router]);
-
-  useEffect(() => {
-    filterIntervenants();
-  }, [intervenants, searchTerm, filterStatus, filterGrade]);
+  }, [status, session, router, debouncedSearchTerm, page]);
 
   const fetchIntervenants = async () => {
     try {
-      const response = await fetch('/api/intervenants');
-      const data = await response.json();
-      
-      if (response.ok) {
-        setIntervenants(data.intervenants);
-      } else {
-        console.error('Erreur:', data.error);
-      }
+      setLoading(true);
+      const params = {
+        page,
+        limit: 12,
+        ...(debouncedSearchTerm && { search: debouncedSearchTerm }),
+        ...(filterGrade !== 'all' && { sortBy: 'grade', sortOrder: 'asc' })
+      };
+
+      const response = await apiClient.intervenants.getAll(params);
+      const list = Array.isArray(response?.data) ? response.data : Array.isArray(response) ? response : [];
+      setIntervenants(list);
+      setPagination(response?.pagination || {});
+
+      // Calculate stats from all loaded data or use response stats
+      const allIntervenants = list;
+      setStats({
+        total: response?.pagination?.total || list.length,
+        disponibles: allIntervenants.filter(i => i.disponible).length,
+        indisponibles: allIntervenants.filter(i => !i.disponible).length,
+        professeurs: allIntervenants.filter(i => i.grade?.includes('Professeur')).length
+      });
     } catch (error) {
-      console.error('Erreur fetch:', error);
+      console.error('Erreur fetch:', error.message || error);
+      setIntervenants([]);
     } finally {
       setLoading(false);
     }
   };
 
-  const filterIntervenants = () => {
-    let filtered = [...intervenants];
-
-    // Filtre par recherche
-    if (searchTerm) {
-      filtered = filtered.filter(intervenant => 
-        `${intervenant.prenom} ${intervenant.nom}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        intervenant.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (intervenant.specialite && intervenant.specialite.toLowerCase().includes(searchTerm.toLowerCase()))
-      );
-    }
-
+  // Filter client-side for status and grade (these are quick filters on current page)
+  const filteredIntervenants = intervenants.filter(intervenant => {
     // Filtre par statut
     if (filterStatus !== 'all') {
-      filtered = filtered.filter(intervenant => {
-        if (filterStatus === 'disponible') return intervenant.disponible;
-        if (filterStatus === 'indisponible') return !intervenant.disponible;
-        return true;
-      });
+      if (filterStatus === 'disponible' && !intervenant.disponible) return false;
+      if (filterStatus === 'indisponible' && intervenant.disponible) return false;
     }
-
     // Filtre par grade
-    if (filterGrade !== 'all') {
-      filtered = filtered.filter(intervenant => intervenant.grade === filterGrade);
-    }
-
-    setFilteredIntervenants(filtered);
-  };
+    if (filterGrade !== 'all' && intervenant.grade !== filterGrade) return false;
+    return true;
+  });
 
   const handleCreateSuccess = (newIntervenant) => {
     setIntervenants(prev => [newIntervenant, ...prev]);
@@ -111,38 +124,21 @@ export default function IntervenantsPage() {
     }
 
     try {
-      const response = await fetch(`/api/intervenants/${intervenantId}`, {
-        method: 'DELETE',
-      });
-
-      if (response.ok) {
-        setIntervenants(prev => prev.filter(i => i.id !== intervenantId));
-      } else {
-        const data = await response.json();
-        alert(data.error || 'Erreur lors de la suppression');
-      }
+      await apiClient.intervenants.delete(intervenantId);
+      setIntervenants(prev => prev.filter(i => i.id !== intervenantId));
     } catch (error) {
-      alert('Erreur de connexion');
+      alert(error.message || 'Erreur lors de la suppression');
     }
   };
 
   const toggleDisponibilite = async (intervenantId, disponible) => {
     try {
-      const response = await fetch(`/api/intervenants/${intervenantId}/disponibilite`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ disponible: !disponible }),
-      });
-
-      if (response.ok) {
-        setIntervenants(prev => prev.map(i => 
-          i.id === intervenantId ? { ...i, disponible: !disponible } : i
-        ));
-      }
+      await apiClient.intervenants.updateDisponibilite(intervenantId, { disponible: !disponible });
+      setIntervenants(prev => prev.map(i =>
+        i.id === intervenantId ? { ...i, disponible: !disponible } : i
+      ));
     } catch (error) {
-      console.error('Erreur:', error);
+      console.error('Erreur:', error.message || error);
     }
   };
 
@@ -186,19 +182,17 @@ export default function IntervenantsPage() {
             <div className="flex items-center">
               <Users className="h-8 w-8 text-blue-600" />
               <div className="ml-4">
-                <p className="text-2xl font-bold text-gray-900">{intervenants.length}</p>
+                <p className="text-2xl font-bold text-gray-900">{pagination.total || stats.total}</p>
                 <p className="text-sm text-gray-600">Total intervenants</p>
               </div>
             </div>
           </div>
-          
+
           <div className="bg-white rounded-lg border border-gray-200 p-6">
             <div className="flex items-center">
               <CheckCircle className="h-8 w-8 text-green-600" />
               <div className="ml-4">
-                <p className="text-2xl font-bold text-gray-900">
-                  {intervenants.filter(i => i.disponible).length}
-                </p>
+                <p className="text-2xl font-bold text-gray-900">{stats.disponibles}</p>
                 <p className="text-sm text-gray-600">Disponibles</p>
               </div>
             </div>
@@ -208,9 +202,7 @@ export default function IntervenantsPage() {
             <div className="flex items-center">
               <XCircle className="h-8 w-8 text-red-600" />
               <div className="ml-4">
-                <p className="text-2xl font-bold text-gray-900">
-                  {intervenants.filter(i => !i.disponible).length}
-                </p>
+                <p className="text-2xl font-bold text-gray-900">{stats.indisponibles}</p>
                 <p className="text-sm text-gray-600">Indisponibles</p>
               </div>
             </div>
@@ -220,9 +212,7 @@ export default function IntervenantsPage() {
             <div className="flex items-center">
               <Star className="h-8 w-8 text-yellow-600" />
               <div className="ml-4">
-                <p className="text-2xl font-bold text-gray-900">
-                  {intervenants.filter(i => i.grade?.includes('Professeur')).length}
-                </p>
+                <p className="text-2xl font-bold text-gray-900">{stats.professeurs}</p>
                 <p className="text-sm text-gray-600">Professeurs</p>
               </div>
             </div>
@@ -404,7 +394,7 @@ export default function IntervenantsPage() {
                         className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-50 transition-colors"
                         title="Modifier"
                       >
-                        <Edit className="h-4 w-4" />
+                        <EditIcon className="h-4 w-4" />
                       </button>
                       
                       <button 
@@ -429,6 +419,17 @@ export default function IntervenantsPage() {
             ))}
           </div>
         )}
+
+        {/* Pagination */}
+        {pagination.pages > 1 && (
+          <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+            <Pagination
+              pagination={pagination}
+              currentPage={page}
+              onPageChange={setPage}
+            />
+          </div>
+        )}
       </div>
 
       {/* Modal de création */}
@@ -441,34 +442,4 @@ export default function IntervenantsPage() {
       )}
     </Layout>
   );
-}
-
-// Vérification côté serveur pour bloquer l'accès aux TEACHER
-export async function getServerSideProps(context) {
-  const session = await getServerSession(context.req, context.res, authOptions);
-
-  // Rediriger si non authentifié
-  if (!session) {
-    return {
-      redirect: {
-        destination: '/auth/signin',
-        permanent: false,
-      },
-    };
-  }
-
-  // Bloquer l'accès aux TEACHER (intervenants)
-  if (session.user.role === 'TEACHER') {
-    return {
-      redirect: {
-        destination: '/intervenant/mes-seances',
-        permanent: false,
-      },
-    };
-  }
-
-  // Autoriser l'accès aux ADMIN et COORDINATOR
-  return {
-    props: {},
-  };
 }

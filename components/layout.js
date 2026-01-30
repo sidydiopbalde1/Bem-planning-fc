@@ -3,6 +3,7 @@ import { useSession, signOut } from 'next-auth/react';
 import { useRouter } from 'next/router';
 import Link from 'next/link';
 import Head from 'next/head';
+import { useLanguage } from '../contexts/LanguageContext';
 import {
   Calendar,
   BookOpen,
@@ -27,6 +28,7 @@ import {
 export default function Layout({ children, title = "Planning FC" }) {
   const { data: session } = useSession();
   const router = useRouter();
+  const { t, language } = useLanguage();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [coordinationOpen, setCoordinationOpen] = useState(true);
@@ -60,66 +62,66 @@ export default function Layout({ children, title = "Planning FC" }) {
 
   // Menu coordinateur (visible pour coordinateurs et admins) - AFFICHÉ EN PREMIER
   const coordinateurNavigation = ['COORDINATOR', 'ADMIN'].includes(session?.user?.role) ? [
-    { name: 'Tableau de Bord', href: '/coordinateur/dashboard', icon: Home },
-    { name: 'Mes Programmes', href: '/coordinateur/programmes', icon: BookOpen },
-    { name: 'Gestion des Modules', href: '/coordinateur/modules', icon: Layers },
-    { name: 'Rotations Weekend', href: '/rotations-weekend', icon: Calendar },
-    { name: 'Campagnes d\'Évaluation', href: '/coordinateur/evaluations', icon: Star },
-    { name: 'Notifications', href: '/coordinateur/notifications', icon: Bell, badge: notificationsCount },
+    { name: t('layout.coordinatorDashboard'), href: '/coordinateur/dashboard', icon: Home },
+    { name: t('layout.myProgrammes'), href: '/coordinateur/programmes', icon: BookOpen },
+    { name: t('layout.moduleManagement'), href: '/coordinateur/modules', icon: Layers },
+    { name: t('layout.weekendRotations'), href: '/rotations-weekend', icon: Calendar },
+    { name: t('layout.evaluationCampaigns'), href: '/coordinateur/evaluations', icon: Star },
+    { name: t('navigation.notifications'), href: '/coordinateur/notifications', icon: Bell, badge: notificationsCount },
   ] : [];
 
   // Navigation principale (outils communs)
   const navigationAll = [
-    { name: 'Calendrier', href: '/calendar', icon: Calendar },
-    { name: 'Programmes', href: '/programmes', icon: BookOpen },
-    { name: 'Intervenants', href: '/intervenants', icon: Users, roles: ['ADMIN', 'COORDINATOR'] }, // Masqué pour TEACHER
-    { name: 'Statistiques', href: '/statistics', icon: BarChart3 },
+    { name: t('navigation.calendar'), href: '/calendar', icon: Calendar },
+    { name: t('navigation.programmes'), href: '/programmes', icon: BookOpen },
+    { name: t('navigation.intervenants'), href: '/intervenants', icon: Users, roles: ['ADMIN', 'COORDINATOR'] },
+    { name: t('navigation.statistics'), href: '/statistics', icon: BarChart3 },
   ];
 
   // Filtrer la navigation selon le rôle de l'utilisateur
   const navigation = navigationAll.filter(item => {
-    if (!item.roles) return true; // Pas de restriction de rôle
+    if (!item.roles) return true;
     return item.roles.includes(session?.user?.role);
   });
 
   // Paramètres (affiché en dernier)
   const settingsNavigation = [
-    { name: 'Paramètres', href: '/settings', icon: Settings }
+    { name: t('navigation.settings'), href: '/settings', icon: Settings }
   ];
 
-  // Menu administrateur (visible uniquement pour les admins) - FUSIONNÉ
+  // Menu administrateur (visible uniquement pour les admins)
   const adminNavigation = session?.user?.role === 'ADMIN' ? [
-    { name: 'Utilisateurs', href: '/admin/users', icon: ShieldCheck },
-    { name: 'Salles & Espaces', href: '/admin/salles', icon: Layers },
-    { name: 'Périodes Académiques', href: '/admin/periodes', icon: Calendar },
-    { name: 'Journal d\'Activités', href: '/admin/logs', icon: FileText },
-    { name: 'Rapports', href: '/admin/rapports', icon: BarChart3 },
+    { name: t('layout.users'), href: '/admin/users', icon: ShieldCheck },
+    { name: t('layout.roomsSpaces'), href: '/admin/salles', icon: Layers },
+    { name: t('layout.academicPeriods'), href: '/admin/periodes', icon: Calendar },
+    { name: t('layout.activityLog'), href: '/admin/logs', icon: FileText },
+    { name: t('navigation.reports'), href: '/admin/rapports', icon: BarChart3 },
   ] : [];
 
   const tableauxBordNav = [
     {
-      name: 'Échéances Académiques',
+      name: t('layout.academicDeadlines'),
       href: '/tableaux-bord/echeances-academiques',
       icon: ClipboardCheck,
-      description: 'Suivi des activités et indicateurs'
+      description: t('layout.academicDeadlinesDesc')
     },
     {
-      name: 'Maquette Pédagogique',
+      name: t('layout.pedagogicalTemplate'),
       href: '/tableaux-bord/maquette-pedagogique',
       icon: GraduationCap,
-      description: 'Modules et résultats étudiants'
+      description: t('layout.pedagogicalTemplateDesc')
     },
     {
-      name: 'Résultats Étudiants',
+      name: t('layout.studentResults'),
       href: '/resultats-etudiants',
       icon: FileText,
-      description: 'Consultation des résultats académiques'
+      description: t('layout.studentResultsDesc')
     },
     {
-      name: 'Tableau de Bord Qualité',
+      name: t('layout.qualityDashboard'),
       href: '/tableaux-bord/qualite',
       icon: Award,
-      description: 'Indicateurs de qualité'
+      description: t('layout.qualityDashboardDesc')
     }
   ];
 
@@ -179,7 +181,7 @@ export default function Layout({ children, title = "Planning FC" }) {
                   onClick={() => setCoordinationOpen(!coordinationOpen)}
                   className="flex items-center justify-between w-full px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider hover:text-gray-700 transition-colors"
                 >
-                  <span>Coordination</span>
+                  <span>{t('layout.coordination')}</span>
                   <ChevronDown className={`h-4 w-4 transition-transform ${
                     coordinationOpen ? 'rotate-180' : ''
                   }`} />
@@ -226,7 +228,7 @@ export default function Layout({ children, title = "Planning FC" }) {
                 onClick={() => setOutilsOpen(!outilsOpen)}
                 className="flex items-center justify-between w-full px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider hover:text-gray-700 transition-colors"
               >
-                <span>Outils</span>
+                <span>{t('layout.tools')}</span>
                 <ChevronDown className={`h-4 w-4 transition-transform ${
                   outilsOpen ? 'rotate-180' : ''
                 }`} />
@@ -268,7 +270,7 @@ export default function Layout({ children, title = "Planning FC" }) {
                   onClick={() => setAdministrationOpen(!administrationOpen)}
                   className="flex items-center justify-between w-full px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider hover:text-gray-700 transition-colors"
                 >
-                  <span>Administration</span>
+                  <span>{t('layout.administration')}</span>
                   <ChevronDown className={`h-4 w-4 transition-transform ${
                     administrationOpen ? 'rotate-180' : ''
                   }`} />
@@ -310,7 +312,7 @@ export default function Layout({ children, title = "Planning FC" }) {
                 onClick={() => setTableauxBordOpen(!tableauxBordOpen)}
                 className="flex items-center justify-between w-full px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider hover:text-gray-700 transition-colors"
               >
-                <span>Tableaux de Bord</span>
+                <span>{t('layout.dashboards')}</span>
                 <ChevronDown className={`h-4 w-4 transition-transform ${
                   tableauxBordOpen ? 'rotate-180' : ''
                 }`} />
@@ -357,7 +359,7 @@ export default function Layout({ children, title = "Planning FC" }) {
                 onClick={() => setParametresOpen(!parametresOpen)}
                 className="flex items-center justify-between w-full px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider hover:text-gray-700 transition-colors"
               >
-                <span>Paramètres</span>
+                <span>{t('navigation.settings')}</span>
                 <ChevronDown className={`h-4 w-4 transition-transform ${
                   parametresOpen ? 'rotate-180' : ''
                 }`} />
@@ -434,7 +436,7 @@ export default function Layout({ children, title = "Planning FC" }) {
                         }}
                       >
                         <Users className="h-4 w-4 mr-2 text-gray-400" />
-                        Mon Profil
+                        {t('layout.myProfile')}
                       </Link>
                       <Link
                         href="/settings"
@@ -445,7 +447,7 @@ export default function Layout({ children, title = "Planning FC" }) {
                         }}
                       >
                         <Settings className="h-4 w-4 mr-2 text-gray-400" />
-                        Paramètres
+                        {t('navigation.settings')}
                       </Link>
                       <div className="border-t border-gray-100 my-1"></div>
                       <button
@@ -456,7 +458,7 @@ export default function Layout({ children, title = "Planning FC" }) {
                         className="flex items-center w-full px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
                       >
                         <LogOut className="h-4 w-4 mr-2" />
-                        Déconnexion
+                        {t('layout.logout')}
                       </button>
                     </div>
                   )}
@@ -505,7 +507,7 @@ export default function Layout({ children, title = "Planning FC" }) {
                   </Link>
                 )}
                 <div className="hidden sm:block text-sm text-gray-600 bg-gray-50 px-3 py-1.5 rounded-full">
-                  {new Date().toLocaleDateString('fr-FR', {
+                  {new Date().toLocaleDateString(language === 'en' ? 'en-GB' : 'fr-FR', {
                     weekday: 'long',
                     day: 'numeric',
                     month: 'long'

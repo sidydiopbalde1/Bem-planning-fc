@@ -1,24 +1,14 @@
 // pages/api/rotations-weekend/index.js
-import { getServerSession } from 'next-auth/next';
 import { PrismaClient } from '@prisma/client';
-import { authOptions } from '../auth/[...nextauth]';
+import { withCoordinator } from '../../../lib/withApiHandler';
 import RotationWeekendManager from '../../../lib/rotation-weekend';
 
 const prisma = new PrismaClient();
 
-export default async function handler(req, res) {
+async function handler(req, res) {
+  const session = req.session;
+
   try {
-    const session = await getServerSession(req, res, authOptions);
-
-    if (!session) {
-      return res.status(401).json({ error: 'Non authentifié' });
-    }
-
-    // Seuls ADMIN et COORDINATOR peuvent gérer les rotations
-    if (!['ADMIN', 'COORDINATOR'].includes(session.user.role)) {
-      return res.status(403).json({ error: 'Accès refusé' });
-    }
-
     if (req.method === 'GET') {
       return await handleGet(req, res, session);
     } else if (req.method === 'POST') {
@@ -37,6 +27,8 @@ export default async function handler(req, res) {
     await prisma.$disconnect();
   }
 }
+
+export default withCoordinator(handler, { entity: 'RotationWeekend' });
 
 /**
  * GET /api/rotations-weekend

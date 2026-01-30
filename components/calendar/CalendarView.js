@@ -75,7 +75,7 @@ export default function CalendarView({
           <span className="text-xs">Conflit</span>
         </div>
       )}
-    </div>
+    </div>  
   );
 
   const renderMonthView = () => {

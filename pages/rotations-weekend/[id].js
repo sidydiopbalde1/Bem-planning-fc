@@ -2,9 +2,9 @@
 import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/router';
-import { getServerSession } from 'next-auth/next';
-import { authOptions } from '../api/auth/[...nextauth]';
 import Layout from '../../components/layout';
+import ConfirmModal from '../../components/modals/ConfirmModal';
+import apiClient from '../../lib/api-client';
 import {
   Calendar,
   Clock,
@@ -41,29 +41,37 @@ export default function RotationDetailPage() {
   const [absenceForm, setAbsenceForm] = useState({
     raison: ''
   });
+  const [alertModal, setAlertModal] = useState({ isOpen: false, type: 'success', title: '', message: '', onConfirm: null });
 
   useEffect(() => {
-    if (id) {
-      fetchRotation();
+    if (status === 'unauthenticated') {
+      router.push('/auth/signin');
+      return;
     }
-  }, [id]);
+    if (status === 'authenticated') {
+      // Seuls ADMIN et COORDINATOR peuvent accéder
+      if (!['ADMIN', 'COORDINATOR'].includes(session?.user?.role)) {
+        router.push('/dashboard');
+        return;
+      }
+      if (id) {
+        fetchRotation();
+      }
+    }
+  }, [status, session, router, id]);
 
   const fetchRotation = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`/api/rotations-weekend/${id}`);
-      const data = await response.json();
-
-      if (response.ok) {
-        setRotation(data.rotation);
-        setSeances(data.seances);
-        setRapportForm(prev => ({
-          ...prev,
-          nbSeancesVisitees: data.seances.length
-        }));
-      } else {
-        console.error('Erreur:', data.error);
-      }
+      const data = await apiClient.rotationsWeekend.getById(id);
+      // Le backend peut retourner directement la rotation ou { rotation, seances }
+      const rotationData = data.rotation || data;
+      setRotation(rotationData);
+      setSeances(data.seances || []);
+      setRapportForm(prev => ({
+        ...prev,
+        nbSeancesVisitees: (data.seances || []).length
+      }));
     } catch (error) {
       console.error('Erreur fetch:', error);
     } finally {
@@ -73,55 +81,56 @@ export default function RotationDetailPage() {
 
   const handleSaveRapport = async () => {
     try {
-      const response = await fetch(`/api/rotations-weekend/${id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          status: 'TERMINE',
-          rapport: rapportForm
-        })
+      await apiClient.rotationsWeekend.terminer(id, rapportForm);
+      setShowRapportModal(false);
+      setAlertModal({
+        isOpen: true,
+        type: 'success',
+        title: 'Rapport enregistré',
+        message: 'Le rapport de supervision a été enregistré avec succès !'
       });
-
-      const data = await response.json();
-
-      if (response.ok) {
-        alert('Rapport enregistré avec succès !');
-        setShowRapportModal(false);
-        fetchRotation();
-      } else {
-        alert(`Erreur: ${data.error}`);
-      }
+      fetchRotation();
     } catch (error) {
       console.error('Erreur:', error);
-      alert('Erreur lors de l\'enregistrement');
+      setAlertModal({
+        isOpen: true,
+        type: 'error',
+        title: 'Erreur',
+        message: error.message || 'Erreur lors de l\'enregistrement'
+      });
     }
   };
 
   const handleDeclareAbsence = async () => {
     if (!absenceForm.raison.trim()) {
-      alert('Veuillez indiquer une raison');
+      setAlertModal({
+        isOpen: true,
+        type: 'warning',
+        title: 'Champ requis',
+        message: 'Veuillez indiquer une raison pour votre absence.'
+      });
       return;
     }
 
     try {
-      const response = await fetch(`/api/rotations-weekend/${id}/absence`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(absenceForm)
+      const data = await apiClient.rotationsWeekend.declareAbsence(id, { raison: absenceForm.raison });
+      const remplacant = data.responsable?.name || 'un remplaçant';
+      setShowAbsenceModal(false);
+      setAlertModal({
+        isOpen: true,
+        type: 'success',
+        title: 'Absence déclarée',
+        message: `Votre absence a été déclarée. Remplaçant : ${remplacant}`,
+        onConfirm: () => router.push('/rotations-weekend')
       });
-
-      const data = await response.json();
-
-      if (response.ok) {
-        alert(`Absence déclarée. Remplaçant: ${data.nouveauResponsable.responsable.name}`);
-        setShowAbsenceModal(false);
-        router.push('/rotations-weekend');
-      } else {
-        alert(`Erreur: ${data.error}`);
-      }
     } catch (error) {
       console.error('Erreur:', error);
-      alert('Erreur lors de la déclaration');
+      setAlertModal({
+        isOpen: true,
+        type: 'error',
+        title: 'Erreur',
+        message: error.message || 'Erreur lors de la déclaration'
+      });
     }
   };
 
@@ -506,33 +515,18 @@ export default function RotationDetailPage() {
           </div>
         </div>
       )}
+
+      {/* Modal d'alerte/notification */}
+      <ConfirmModal
+        isOpen={alertModal.isOpen}
+        onClose={() => setAlertModal(prev => ({ ...prev, isOpen: false }))}
+        onConfirm={alertModal.onConfirm}
+        title={alertModal.title}
+        message={alertModal.message}
+        type={alertModal.type}
+        confirmText="OK"
+        showCancel={false}
+      />
     </Layout>
   );
-}
-
-// Protection côté serveur
-export async function getServerSideProps(context) {
-  const session = await getServerSession(context.req, context.res, authOptions);
-
-  if (!session) {
-    return {
-      redirect: {
-        destination: '/auth/signin',
-        permanent: false,
-      },
-    };
-  }
-
-  if (!['ADMIN', 'COORDINATOR'].includes(session.user.role)) {
-    return {
-      redirect: {
-        destination: '/dashboard',
-        permanent: false,
-      },
-    };
-  }
-
-  return {
-    props: {},
-  };
 }

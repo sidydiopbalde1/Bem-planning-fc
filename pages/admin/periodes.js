@@ -9,6 +9,7 @@ import {
   Calendar, Plus, Search, Edit2, Trash2,
   CheckCircle, XCircle, AlertCircle, Clock
 } from 'lucide-react';
+import apiClient from '../../lib/api-client';
 
 export default function PeriodesManagement() {
   const { data: session, status } = useSession();
@@ -49,19 +50,17 @@ export default function PeriodesManagement() {
   const fetchPeriodes = async () => {
     try {
       setLoading(true);
-      const params = new URLSearchParams();
-      if (debouncedSearchTerm) params.append('search', debouncedSearchTerm);
-      if (activeFilter) params.append('active', activeFilter);
-
-      const response = await fetch(`/api/admin/periodes?${params}`);
-      const data = await response.json();
-
-      if (response.ok) {
-        setPeriodes(data.periodes);
-        setStats(data.stats);
-      } else {
-        console.error('Erreur:', data.error);
+      if (session?.accessToken) {
+        apiClient.setToken(session.accessToken);
       }
+
+      const params = {};
+      if (debouncedSearchTerm) params.search = debouncedSearchTerm;
+      if (activeFilter) params.active = activeFilter;
+
+      const data = await apiClient.admin.getPeriodes(params);
+      setPeriodes(data.data || []);
+      setStats(data.stats || {});
     } catch (error) {
       console.error('Erreur lors du chargement des périodes:', error);
     } finally {
@@ -76,21 +75,16 @@ export default function PeriodesManagement() {
 
     try {
       setActionLoading(true);
-      const response = await fetch(`/api/admin/periodes/${periodeId}`, {
-        method: 'DELETE'
-      });
-
-      const data = await response.json();
-
-      if (response.ok) {
-        setPeriodes(periodes.filter(p => p.id !== periodeId));
-        alert('Période académique supprimée avec succès');
-      } else {
-        alert(data.message || data.error || 'Erreur lors de la suppression');
+      if (session?.accessToken) {
+        apiClient.setToken(session.accessToken);
       }
+
+      await apiClient.admin.deletePeriode(periodeId);
+      setPeriodes(periodes.filter(p => p.id !== periodeId));
+      alert('Période académique supprimée avec succès');
     } catch (error) {
       console.error('Erreur:', error);
-      alert('Erreur lors de la suppression');
+      alert(error.message || 'Erreur lors de la suppression');
     } finally {
       setActionLoading(false);
     }
@@ -164,7 +158,7 @@ export default function PeriodesManagement() {
                   <div>
                     <p className="text-sm text-gray-600 dark:text-gray-400">Active</p>
                     <p className="text-2xl font-bold text-green-600">
-                      {stats.active || 0}
+                      {stats.actives || 0}
                     </p>
                   </div>
                   <CheckCircle className="w-10 h-10 text-green-400" />
@@ -178,7 +172,7 @@ export default function PeriodesManagement() {
                   <div>
                     <p className="text-sm text-gray-600 dark:text-gray-400">Inactives</p>
                     <p className="text-2xl font-bold text-gray-600">
-                      {stats.inactive || 0}
+                      {stats.inactives || 0}
                     </p>
                   </div>
                   <XCircle className="w-10 h-10 text-gray-400" />
@@ -363,21 +357,10 @@ function CreatePeriodeModal({ onClose, onSuccess }) {
 
     try {
       setLoading(true);
-      const response = await fetch('/api/admin/periodes', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData)
-      });
-
-      const data = await response.json();
-
-      if (response.ok) {
-        onSuccess();
-      } else {
-        setError(data.error || 'Erreur lors de la création');
-      }
+      await apiClient.admin.createPeriode(formData);
+      onSuccess();
     } catch (error) {
-      setError('Erreur réseau');
+      setError(error.message || 'Erreur lors de la création');
     } finally {
       setLoading(false);
     }
@@ -616,21 +599,10 @@ function EditPeriodeModal({ periode, onClose, onSuccess }) {
 
     try {
       setLoading(true);
-      const response = await fetch(`/api/admin/periodes/${periode.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData)
-      });
-
-      const data = await response.json();
-
-      if (response.ok) {
-        onSuccess();
-      } else {
-        setError(data.error || 'Erreur lors de la mise à jour');
-      }
+      await apiClient.admin.updatePeriode(periode.id, formData);
+      onSuccess();
     } catch (error) {
-      setError('Erreur réseau');
+      setError(error.message || 'Erreur lors de la mise à jour');
     } finally {
       setLoading(false);
     }

@@ -3,9 +3,13 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import { useSession } from 'next-auth/react';
 import Layout from '../../components/layout';
+import CreateModuleModal from '../../components/modals/CreateModuleModal';
+import AnimatedPagination from '../../components/ui/AnimatedPagination';
+import { useTableAnimation } from '../../components/ui/AnimatedTable';
+import apiClient from '../../lib/api-client';
 import {
   BookOpen, Search, Plus, Edit2, Trash2, User, Calendar, Clock, BarChart3,
-  Filter, X, ChevronDown, AlertTriangle, CheckCircle, Calendar as CalendarIcon
+  Filter, X, ChevronDown, AlertTriangle, CheckCircle
 } from 'lucide-react';
 
 export default function ModulesPage() {
@@ -17,6 +21,7 @@ export default function ModulesPage() {
   const [intervenants, setIntervenants] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [selectedProgramme, setSelectedProgramme] = useState(programmeId || '');
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -25,7 +30,10 @@ export default function ModulesPage() {
   const [selectedModule, setSelectedModule] = useState(null);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [page, setPage] = useState(1);
+  const [pagination, setPagination] = useState(null);
 
+  // ===== AUTHENTIFICATION =====
   useEffect(() => {
     if (status === 'unauthenticated') {
       router.push('/login');
@@ -34,6 +42,7 @@ export default function ModulesPage() {
     }
   }, [status, session, router]);
 
+  // ===== CHARGEMENT INITIAL =====
   useEffect(() => {
     if (status === 'authenticated') {
       fetchProgrammes();
@@ -47,124 +56,113 @@ export default function ModulesPage() {
     }
   }, [programmeId]);
 
+  // ===== DEBOUNCE SEARCH =====
   useEffect(() => {
-    if (status === 'authenticated') {
-      fetchModules();
-    }
-  }, [status, searchTerm, statusFilter, selectedProgramme]);
+    const timer = setTimeout(() => {
+      setDebouncedSearchTerm(searchTerm);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
 
-  const fetchProgrammes = async () => {
-    try {
-      const response = await fetch('/api/coordinateur/programmes');
-      if (response.ok) {
-        const data = await response.json();
-        setProgrammes(data.programmes);
-      }
-    } catch (error) {
-      console.error('Erreur:', error);
-    }
-  };
-
-  const fetchIntervenants = async () => {
-    try {
-      const response = await fetch('/api/intervenants');
-      if (response.ok) {
-        const data = await response.json();
-        setIntervenants(data.intervenants);
-      }
-    } catch (error) {
-      console.error('Erreur:', error);
-    }
-  };
-
-  const fetchModules = async () => {
+  // ===== FETCH MODULES =====
+  const fetchModules = async (currentPage) => {
     try {
       setLoading(true);
-      const params = new URLSearchParams();
-      if (searchTerm) params.append('search', searchTerm);
-      if (statusFilter) params.append('status', statusFilter);
-      if (selectedProgramme) params.append('programmeId', selectedProgramme);
+      const params = { page: currentPage, limit: 10 };
+      if (debouncedSearchTerm) params.search = debouncedSearchTerm;
+      if (statusFilter) params.status = statusFilter;
+      if (selectedProgramme) params.programmeId = selectedProgramme;
 
-      const response = await fetch(`/api/coordinateur/modules?${params}`);
-      if (response.ok) {
-        const data = await response.json();
-        setModules(data.modules);
-      } else {
-        setError('Erreur lors du chargement des modules');
-      }
+      const data = await apiClient.coordinateur.getModules(params);
+      console.log("modules coordinateur", data);
+
+      setModules(data.modules || data);
+      setPagination(data.pagination || null);
     } catch (error) {
-      setError('Erreur de connexion au serveur');
+      setError(error.message || 'Erreur de connexion au serveur');
     } finally {
       setLoading(false);
     }
   };
 
+  useEffect(() => {
+    if (status === 'authenticated') {
+      fetchModules(page);
+    }
+  }, [status, debouncedSearchTerm, statusFilter, selectedProgramme, page]);
+
+  // Reset page when filters change
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedSearchTerm, statusFilter, selectedProgramme]);
+
+  const fetchProgrammes = async () => {
+    try {
+      const data = await apiClient.coordinateur.getProgrammes();
+      setProgrammes(data.programmes || data);
+    } catch (error) {
+      console.error('Erreur:', error.message || error);
+    }
+  };
+
+  const fetchIntervenants = async () => {
+    try {
+      const intervenants = await apiClient.intervenants.getAll();
+      const list = intervenants?.data || intervenants;
+      setIntervenants(Array.isArray(list) ? list : []);
+    } catch (error) {
+      console.error('Erreur:', error.message || error);
+      setIntervenants([]);
+    }
+  };
+
+  // ===== HANDLERS =====
   const handleCreateModule = async (formData) => {
     try {
-      const response = await fetch('/api/coordinateur/modules', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData)
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setSuccess('Module créé avec succès');
-        setShowCreateModal(false);
-        fetchModules();
-        setTimeout(() => setSuccess(''), 3000);
-      } else {
-        const data = await response.json();
-        setError(data.error || 'Erreur lors de la création');
-      }
+      await apiClient.modules.create(formData);
+      setSuccess('Module créé avec succès');
+      setShowCreateModal(false);
+      fetchModules(page);
+      setTimeout(() => setSuccess(''), 3000);
     } catch (error) {
-      setError('Erreur de connexion au serveur');
+      setError(error.message || 'Erreur lors de la création');
     }
   };
 
   const handleUpdateModule = async (formData) => {
     try {
-      const response = await fetch(`/api/coordinateur/modules/${selectedModule.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData)
-      });
-
-      if (response.ok) {
-        setSuccess('Module mis à jour avec succès');
-        setShowEditModal(false);
-        fetchModules();
-        setTimeout(() => setSuccess(''), 3000);
-      } else {
-        const data = await response.json();
-        setError(data.error || 'Erreur lors de la mise à jour');
-      }
+      await apiClient.modules.update(selectedModule.id, formData);
+      setSuccess('Module mis à jour avec succès');
+      setShowEditModal(false);
+      fetchModules(page);
+      setTimeout(() => setSuccess(''), 3000);
     } catch (error) {
-      setError('Erreur de connexion au serveur');
+      setError(error.message || 'Erreur lors de la mise à jour');
     }
   };
 
   const handleDeleteModule = async () => {
     try {
-      const response = await fetch(`/api/coordinateur/modules/${selectedModule.id}`, {
-        method: 'DELETE'
-      });
-
-      if (response.ok) {
-        setSuccess('Module supprimé avec succès');
-        setShowDeleteConfirm(false);
-        setSelectedModule(null);
-        fetchModules();
-        setTimeout(() => setSuccess(''), 3000);
-      } else {
-        const data = await response.json();
-        setError(data.error || 'Erreur lors de la suppression');
-      }
+      await apiClient.modules.delete(selectedModule.id);
+      setSuccess('Module supprimé avec succès');
+      setShowDeleteConfirm(false);
+      setSelectedModule(null);
+      fetchModules(page);
+      setTimeout(() => setSuccess(''), 3000);
     } catch (error) {
-      setError('Erreur de connexion au serveur');
+      setError(error.message || 'Erreur lors de la suppression');
     }
   };
 
+  const handlePageChange = (
+    
+    
+  ) => {
+    setPage(newPage);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  // ===== UTILS =====
   const getStatusColor = (status) => {
     const colors = {
       PLANIFIE: 'bg-blue-100 text-blue-800',
@@ -207,7 +205,10 @@ export default function ModulesPage() {
 
   const stats = calculateStats();
 
-  if (status === 'loading' || loading) {
+  // Hook pour les animations du tableau
+  const { animatedData, isAnimating, getRowAnimation } = useTableAnimation(modules, page);
+
+  if (status === 'loading' || (loading && modules.length === 0)) {
     return (
       <Layout>
         <div className="flex items-center justify-center h-64">
@@ -220,7 +221,7 @@ export default function ModulesPage() {
   return (
     <Layout>
       <div className="space-y-6">
-        {/* Header */}
+        {/* ===== HEADER ===== */}
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold text-gray-900">Gestion des Modules</h1>
@@ -235,7 +236,7 @@ export default function ModulesPage() {
           </button>
         </div>
 
-        {/* Success/Error Messages */}
+        {/* ===== MESSAGES ===== */}
         {success && (
           <div className="bg-green-50 border border-green-200 text-green-800 px-4 py-3 rounded-lg flex items-center space-x-2">
             <CheckCircle className="w-5 h-5" />
@@ -252,7 +253,7 @@ export default function ModulesPage() {
           </div>
         )}
 
-        {/* Statistics Cards */}
+        {/* ===== STATISTICS CARDS ===== */}
         <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
           <div className="bg-white rounded-lg shadow p-4">
             <div className="flex items-center justify-between">
@@ -315,7 +316,7 @@ export default function ModulesPage() {
           </div>
         </div>
 
-        {/* Filters */}
+        {/* ===== FILTERS ===== */}
         <div className="bg-white rounded-lg shadow p-4">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="relative">
@@ -357,183 +358,187 @@ export default function ModulesPage() {
           </div>
         </div>
 
-        {/* Modules Table */}
-        <div className="bg-white rounded-lg shadow overflow-hidden">
-          {modules.length > 0 ? (
+        {/* ===== TABLE ===== */}
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden relative">
+          {/* Loading overlay */}
+          {loading && modules.length > 0 && (
+            <div className="absolute inset-0 bg-white/80 dark:bg-gray-900/80 backdrop-blur-sm z-30 flex items-center justify-center">
+              <div className="flex flex-col items-center space-y-3">
+                <div className="relative">
+                  <div className="w-10 h-10 border-4 border-green-200 rounded-full animate-spin border-t-green-600" />
+                </div>
+                <span className="text-sm text-gray-600 dark:text-gray-400">Chargement...</span>
+              </div>
+            </div>
+          )}
+
+          {animatedData.length > 0 ? (
             <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
+              <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                <thead className="bg-gray-50 dark:bg-gray-900 sticky top-0 z-20">
                   <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Code</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nom</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Programme</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Intervenant</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">VHT</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Séances</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Statut</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Progression</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Code</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Nom</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Programme</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Intervenant</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">VHT</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Seances</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Statut</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Progression</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {modules.map((module) => (
-                    <tr key={module.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                        {module.code}
-                      </td>
-                      <td className="px-6 py-4 text-sm text-gray-900">
-                        {module.name}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                        {module.programme?.code}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                        {module.intervenant ? (
-                          <div className="flex items-center space-x-2">
-                            <User className="w-4 h-4 text-gray-400" />
-                            <span>{module.intervenant.prenom} {module.intervenant.nom}</span>
+                <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                  {animatedData.map((module, index) => {
+                    const rowAnim = getRowAnimation(index);
+                    return (
+                      <tr
+                        key={module.id}
+                        className={`hover:bg-gray-50 dark:hover:bg-gray-700/50 ${rowAnim.className}`}
+                        style={rowAnim.style}
+                      >
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
+                          {module.code}
+                        </td>
+                        <td className="px-6 py-4 text-sm text-gray-900 dark:text-white">
+                          {module.name}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-400">
+                          {module.programme?.code}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-400">
+                          {module.intervenant ? (
+                            <div className="flex items-center space-x-2">
+                              <User className="w-4 h-4 text-gray-400" />
+                              <span>{module.intervenant.prenom} {module.intervenant.nom}</span>
+                            </div>
+                          ) : (
+                            <span className="text-orange-600 flex items-center space-x-1">
+                              <AlertTriangle className="w-4 h-4" />
+                              <span>Non assigne</span>
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
+                          <div className="text-sm">
+                            <div>{module.vht}h</div>
+                            <div className="text-xs text-gray-500 dark:text-gray-400">
+                              CM:{module.cm} TD:{module.td} TP:{module.tp}
+                            </div>
                           </div>
-                        ) : (
-                          <span className="text-orange-600 flex items-center space-x-1">
-                            <AlertTriangle className="w-4 h-4" />
-                            <span>Non assigné</span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
+                          {module._count?.seances || 0}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span className={`inline-flex px-2 py-1 text-xs rounded-full transition-all duration-300 ${getStatusColor(module.status)}`}>
+                            {getStatusLabel(module.status)}
                           </span>
-                        )}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        <div className="text-sm">
-                          <div>{module.vht}h</div>
-                          <div className="text-xs text-gray-500">
-                            CM:{module.cm} TD:{module.td} TP:{module.tp}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="flex items-center space-x-2">
+                            <div className="w-20 bg-gray-200 dark:bg-gray-700 rounded-full h-2 overflow-hidden">
+                              <div
+                                className={`h-2 rounded-full transition-all duration-500 ease-out ${getProgressColor(module.progression || 0)}`}
+                                style={{ width: `${module.progression || 0}%` }}
+                              />
+                            </div>
+                            <span className="text-sm text-gray-600 dark:text-gray-400">{module.progression || 0}%</span>
                           </div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {module._count?.seances || 0}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`inline-flex px-2 py-1 text-xs rounded-full ${getStatusColor(module.status)}`}>
-                          {getStatusLabel(module.status)}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center space-x-2">
-                          <div className="w-20 bg-gray-200 rounded-full h-2">
-                            <div
-                              className={`h-2 rounded-full ${getProgressColor(module.progression || 0)}`}
-                              style={{ width: `${module.progression || 0}%` }}
-                            />
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          <div className="flex items-center space-x-2">
+                            <button
+                              onClick={() => {
+                                setSelectedModule(module);
+                                setShowEditModal(true);
+                              }}
+                              className="p-1.5 rounded-lg text-blue-600 hover:text-blue-800 hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-all duration-200"
+                              title="Editer"
+                            >
+                              <Edit2 className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => {
+                                setSelectedModule(module);
+                                setShowDeleteConfirm(true);
+                              }}
+                              className="p-1.5 rounded-lg text-red-600 hover:text-red-800 hover:bg-red-50 dark:hover:bg-red-900/30 transition-all duration-200"
+                              title="Supprimer"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
                           </div>
-                          <span className="text-sm text-gray-600">{module.progression || 0}%</span>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        <div className="flex items-center space-x-2">
-                          <button
-                            onClick={() => {
-                              setSelectedModule(module);
-                              setShowEditModal(true);
-                            }}
-                            className="text-blue-600 hover:text-blue-800"
-                          >
-                            <Edit2 className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => {
-                              setSelectedModule(module);
-                              setShowDeleteConfirm(true);
-                            }}
-                            className="text-red-600 hover:text-red-800"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
           ) : (
             <div className="text-center py-12">
-              <BookOpen className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-              <p className="text-gray-600 mb-2">Aucun module trouvé</p>
+              <BookOpen className="w-16 h-16 text-gray-400 mx-auto mb-4 animate-pulse" />
+              <p className="text-gray-600 dark:text-gray-400 mb-2">Aucun module trouve</p>
               <button
                 onClick={() => setShowCreateModal(true)}
-                className="text-green-600 hover:text-green-700 font-medium"
+                className="text-green-600 hover:text-green-700 font-medium transition-colors"
               >
-                Créer le premier module
+                Creer le premier module
               </button>
             </div>
           )}
+
+          {/* ===== PAGINATION ANIMEE ===== */}
+          <AnimatedPagination
+            pagination={pagination}
+            currentPage={page}
+            onPageChange={handlePageChange}
+          />
         </div>
 
+        {/* ===== MODALS ===== */}
         {/* Create Modal */}
-        {showCreateModal && (
-          <ModuleModal
-            mode="create"
-            programmes={programmes}
-            intervenants={intervenants}
-            initialProgrammeId={programmeId}
-            onSubmit={handleCreateModule}
-            onClose={() => setShowCreateModal(false)}
-          />
-        )}
+        <CreateModuleModal
+          isOpen={showCreateModal}
+          onClose={() => setShowCreateModal(false)}
+          onSuccess={handleCreateModule}
+          programmeId={selectedProgramme}
+        />
 
         {/* Edit Modal */}
         {showEditModal && selectedModule && (
-          <ModuleModal
-            mode="edit"
+          <ModuleEditModal
+            isOpen={showEditModal}
             module={selectedModule}
             programmes={programmes}
             intervenants={intervenants}
-            onSubmit={handleUpdateModule}
             onClose={() => {
               setShowEditModal(false);
               setSelectedModule(null);
             }}
+            onSuccess={handleUpdateModule}
           />
         )}
 
         {/* Delete Confirmation */}
         {showDeleteConfirm && selectedModule && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={() => setShowDeleteConfirm(false)}>
-            <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4" onClick={(e) => e.stopPropagation()}>
-              <h3 className="text-lg font-bold text-gray-900 mb-4">Confirmer la suppression</h3>
-              <p className="text-gray-600 mb-4">
-                Êtes-vous sûr de vouloir supprimer le module <strong>{selectedModule.code}</strong> ?
-              </p>
-              {selectedModule._count?.seances > 0 && (
-                <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
-                  <p className="text-sm text-red-800">
-                    Ce module contient {selectedModule._count.seances} séance(s). Vous devez d'abord les supprimer.
-                  </p>
-                </div>
-              )}
-              <div className="flex space-x-3">
-                <button
-                  onClick={() => setShowDeleteConfirm(false)}
-                  className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
-                >
-                  Annuler
-                </button>
-                <button
-                  onClick={handleDeleteModule}
-                  disabled={selectedModule._count?.seances > 0}
-                  className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
-                >
-                  Supprimer
-                </button>
-              </div>
-            </div>
-          </div>
+          <DeleteConfirmModal
+            isOpen={showDeleteConfirm}
+            module={selectedModule}
+            onClose={() => setShowDeleteConfirm(false)}
+            onConfirm={handleDeleteModule}
+          />
         )}
       </div>
     </Layout>
   );
 }
 
-function ModuleModal({ mode, module, programmes, intervenants, initialProgrammeId, onSubmit, onClose }) {
+/**
+ * Composant Modal d'édition
+ */
+function ModuleEditModal({ isOpen, module, programmes, intervenants, onClose, onSuccess }) {
   const [formData, setFormData] = useState({
     code: module?.code || '',
     name: module?.name || '',
@@ -544,246 +549,181 @@ function ModuleModal({ mode, module, programmes, intervenants, initialProgrammeI
     tpe: module?.tpe || 0,
     coefficient: module?.coefficient || 1,
     credits: module?.credits || 1,
-    programmeId: module?.programmeId || initialProgrammeId || '',
+    programmeId: module?.programmeId || '',
     intervenantId: module?.intervenantId || '',
     dateDebut: module?.dateDebut ? new Date(module.dateDebut).toISOString().split('T')[0] : '',
     dateFin: module?.dateFin ? new Date(module.dateFin).toISOString().split('T')[0] : '',
     status: module?.status || 'PLANIFIE',
     progression: module?.progression || 0
   });
+  const [loading, setLoading] = useState(false);
 
   const vht = parseInt(formData.cm || 0) + parseInt(formData.td || 0) + parseInt(formData.tp || 0) + parseInt(formData.tpe || 0);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    onSubmit(formData);
+    setLoading(true);
+    try {
+      await onSuccess(formData);
+    } finally {
+      setLoading(false);
+    }
   };
 
+  if (!isOpen) return null;
+
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 overflow-y-auto" onClick={onClose}>
-      <div className="bg-white rounded-lg p-6 max-w-3xl w-full mx-4 my-8" onClick={(e) => e.stopPropagation()}>
-        <h2 className="text-2xl font-bold text-gray-900 mb-6">
-          {mode === 'create' ? 'Nouveau Module' : 'Modifier le Module'}
-        </h2>
-
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Code *</label>
-              <input
-                type="text"
-                required
-                value={formData.code}
-                onChange={(e) => setFormData({ ...formData, code: e.target.value })}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                placeholder="Ex: INF101"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Programme *</label>
-              <select
-                required
-                value={formData.programmeId}
-                onChange={(e) => setFormData({ ...formData, programmeId: e.target.value })}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-              >
-                <option value="">Sélectionner un programme</option>
-                {programmes.map((prog) => (
-                  <option key={prog.id} value={prog.id}>
-                    {prog.code} - {prog.name}
-                  </option>
-                ))}
-              </select>
-            </div>
+    <>
+      <div className="fixed inset-0 bg-black/50 z-30" onClick={onClose}></div>
+      <div className="fixed inset-0 z-35 flex items-center justify-center p-4 pointer-events-none">
+        <div className="bg-white rounded-lg shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto pointer-events-auto">
+          <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-white sticky top-0 z-10">
+            <h3 className="text-lg font-medium text-gray-900">Modifier le module</h3>
+            <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+              <X className="h-6 w-6" />
+            </button>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Nom du module *</label>
-            <input
-              type="text"
-              required
-              value={formData.name}
-              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-              placeholder="Ex: Introduction à l'Informatique"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Description</label>
-            <textarea
-              value={formData.description}
-              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-              rows={3}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-              placeholder="Description du module..."
-            />
-          </div>
-
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">CM (h)</label>
-              <input
-                type="number"
-                min="0"
-                value={formData.cm}
-                onChange={(e) => setFormData({ ...formData, cm: e.target.value })}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">TD (h)</label>
-              <input
-                type="number"
-                min="0"
-                value={formData.td}
-                onChange={(e) => setFormData({ ...formData, td: e.target.value })}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">TP (h)</label>
-              <input
-                type="number"
-                min="0"
-                value={formData.tp}
-                onChange={(e) => setFormData({ ...formData, tp: e.target.value })}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">TPE (h)</label>
-              <input
-                type="number"
-                min="0"
-                value={formData.tpe}
-                onChange={(e) => setFormData({ ...formData, tpe: e.target.value })}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-              />
-            </div>
-
-            <div className="bg-purple-50 rounded-lg p-3">
-              <label className="block text-sm font-medium text-purple-700 mb-1">VHT Total</label>
-              <p className="text-2xl font-bold text-purple-900">{vht}h</p>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Coefficient</label>
-              <input
-                type="number"
-                min="1"
-                value={formData.coefficient}
-                onChange={(e) => setFormData({ ...formData, coefficient: e.target.value })}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Crédits ECTS</label>
-              <input
-                type="number"
-                min="1"
-                value={formData.credits}
-                onChange={(e) => setFormData({ ...formData, credits: e.target.value })}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Intervenant</label>
-            <select
-              value={formData.intervenantId}
-              onChange={(e) => setFormData({ ...formData, intervenantId: e.target.value })}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-            >
-              <option value="">Aucun (à assigner plus tard)</option>
-              {intervenants.map((intervenant) => (
-                <option key={intervenant.id} value={intervenant.id}>
-                  {intervenant.prenom} {intervenant.nom} - {intervenant.email}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Date de début</label>
-              <input
-                type="date"
-                value={formData.dateDebut}
-                onChange={(e) => setFormData({ ...formData, dateDebut: e.target.value })}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Date de fin</label>
-              <input
-                type="date"
-                value={formData.dateFin}
-                onChange={(e) => setFormData({ ...formData, dateFin: e.target.value })}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-              />
-            </div>
-          </div>
-
-          {mode === 'edit' && (
+          <form onSubmit={handleSubmit} className="p-6 space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Statut</label>
-                <select
-                  value={formData.status}
-                  onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                >
-                  <option value="PLANIFIE">Planifié</option>
-                  <option value="EN_COURS">En cours</option>
-                  <option value="TERMINE">Terminé</option>
-                  <option value="SUSPENDU">Suspendu</option>
-                  <option value="ANNULE">Annulé</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Progression ({formData.progression}%)
-                </label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Code</label>
                 <input
-                  type="range"
-                  min="0"
-                  max="100"
-                  value={formData.progression}
-                  onChange={(e) => setFormData({ ...formData, progression: e.target.value })}
-                  className="w-full"
+                  type="text"
+                  value={formData.code}
+                  onChange={(e) => setFormData({ ...formData, code: e.target.value })}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
                 />
               </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Programme</label>
+                <select
+                  value={formData.programmeId}
+                  onChange={(e) => setFormData({ ...formData, programmeId: e.target.value })}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
+                >
+                  <option value="">Sélectionner</option>
+                  {programmes.map((prog) => (
+                    <option key={prog.id} value={prog.id}>{prog.code}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Nom</label>
+              <input
+                type="text"
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+              <input
+                type="number"
+                placeholder="CM"
+                value={formData.cm}
+                onChange={(e) => setFormData({ ...formData, cm: e.target.value })}
+                className="px-4 py-2 border border-gray-300 rounded-lg"
+              />
+              <input
+                type="number"
+                placeholder="TD"
+                value={formData.td}
+                onChange={(e) => setFormData({ ...formData, td: e.target.value })}
+                className="px-4 py-2 border border-gray-300 rounded-lg"
+              />
+              <input
+                type="number"
+                placeholder="TP"
+                value={formData.tp}
+                onChange={(e) => setFormData({ ...formData, tp: e.target.value })}
+                className="px-4 py-2 border border-gray-300 rounded-lg"
+              />
+              <input
+                type="number"
+                placeholder="TPE"
+                value={formData.tpe}
+                onChange={(e) => setFormData({ ...formData, tpe: e.target.value })}
+                className="px-4 py-2 border border-gray-300 rounded-lg"
+              />
+              <div className="bg-blue-50 rounded-lg p-2 text-center">
+                <p className="text-xs text-blue-600 font-bold">VHT: {vht}h</p>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Progression: {formData.progression}%</label>
+              <input
+                type="range"
+                min="0"
+                max="100"
+                value={formData.progression}
+                onChange={(e) => setFormData({ ...formData, progression: e.target.value })}
+                className="w-full"
+              />
+            </div>
+
+            <div className="flex space-x-3 pt-4 border-t">
+              <button type="button" onClick={onClose} className="flex-1 px-4 py-2 border rounded-lg">
+                Annuler
+              </button>
+              <button
+                type="submit"
+                disabled={loading}
+                className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
+              >
+                {loading ? 'Mise à jour...' : 'Mettre à jour'}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </>
+  );
+}
+
+/**
+ * Composant Modal de confirmation de suppression
+ */
+function DeleteConfirmModal({ isOpen, module, onClose, onConfirm }) {
+  if (!isOpen) return null;
+
+  return (
+    <>
+      <div className="fixed inset-0 bg-black/50 z-30" onClick={onClose}></div>
+      <div className="fixed inset-0 z-35 flex items-center justify-center p-4 pointer-events-none">
+        <div className="bg-white rounded-lg p-6 max-w-md w-full pointer-events-auto">
+          <h3 className="text-lg font-bold text-gray-900 mb-4">Confirmer la suppression</h3>
+          <p className="text-gray-600 mb-4">
+            Êtes-vous sûr de vouloir supprimer le module <strong>{module.code}</strong> ?
+          </p>
+          {module._count?.seances > 0 && (
+            <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
+              <p className="text-sm text-red-800">
+                Ce module contient {module._count.seances} séance(s). Vous devez d'abord les supprimer.
+              </p>
             </div>
           )}
-
-          <div className="flex space-x-3 pt-4 border-t">
+          <div className="flex space-x-3">
             <button
-              type="button"
               onClick={onClose}
-              className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+              className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
             >
               Annuler
             </button>
             <button
-              type="submit"
-              className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+              onClick={onConfirm}
+              disabled={module._count?.seances > 0}
+              className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:bg-gray-300"
             >
-              {mode === 'create' ? 'Créer' : 'Mettre à jour'}
+              Supprimer
             </button>
           </div>
-        </form>
+        </div>
       </div>
-    </div>
+    </>
   );
 }

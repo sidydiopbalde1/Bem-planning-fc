@@ -1,5 +1,5 @@
 // pages/api/coordinateur/programmes.js
-import { getServerSession } from 'next-auth';
+import { getServerSession } from 'next-auth/next';
 import { authOptions } from '../auth/[...nextauth]';
 import { PrismaClient } from '@prisma/client';
 
@@ -33,7 +33,11 @@ export default async function handler(req, res) {
 }
 
 async function handleGet(req, res, session) {
-  const { search, status, semestre } = req.query;
+  const { search, status, semestre, page = 1, limit = 12 } = req.query;
+
+  const pageNum = parseInt(page);
+  const limitNum = parseInt(limit);
+  const skip = (pageNum - 1) * limitNum;
 
   const where = {};
 
@@ -80,7 +84,9 @@ async function handleGet(req, res, session) {
       orderBy: [
         { status: 'asc' },
         { dateDebut: 'desc' }
-      ]
+      ],
+      skip,
+      take: limitNum
     }),
     prisma.programme.count({ where })
   ]);
@@ -104,7 +110,16 @@ async function handleGet(req, res, session) {
     }).length
   };
 
-  return res.status(200).json({ programmes, stats });
+  return res.status(200).json({
+    programmes,
+    stats,
+    pagination: {
+      page: pageNum,
+      limit: limitNum,
+      total,
+      pages: Math.ceil(total / limitNum)
+    }
+  });
 }
 
 async function handlePost(req, res, session) {

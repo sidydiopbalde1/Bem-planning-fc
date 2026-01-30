@@ -1,6 +1,7 @@
 // components/modals/CreateModuleModal.js
 import { useState, useEffect } from 'react';
 import { X, Save, BookOpen, Hash, Users, Clock, AlertCircle } from 'lucide-react';
+import apiClient from '../../lib/api-client';
 
 const CreateModuleModal = ({ isOpen, onClose, onSuccess, programmeId }) => {
   const [formData, setFormData] = useState({
@@ -35,19 +36,21 @@ const CreateModuleModal = ({ isOpen, onClose, onSuccess, programmeId }) => {
   useEffect(() => {
     if (isOpen) {
       fetchIntervenants();
+      // Empêcher le scroll du body quand modal ouvert
+      document.body.style.overflow = 'hidden';
     }
+    return () => {
+      document.body.style.overflow = 'unset';
+    };
   }, [isOpen]);
 
   const fetchIntervenants = async () => {
     try {
-      const response = await fetch('/api/intervenants');
-      const data = await response.json();
-      
-      if (response.ok) {
-        setIntervenants(data.intervenants.filter(i => i.disponible));
-      }
+      const intervenants = await apiClient.intervenants.getAll();
+      const list = intervenants?.data || intervenants;
+      setIntervenants(list.filter(i => i.disponible));
     } catch (error) {
-      console.error('Erreur fetch intervenants:', error);
+      console.error('Erreur fetch intervenants:', error.message || error);
     } finally {
       setLoadingIntervenants(false);
     }
@@ -97,7 +100,7 @@ const CreateModuleModal = ({ isOpen, onClose, onSuccess, programmeId }) => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
+
     if (!validateForm()) {
       return;
     }
@@ -105,57 +108,44 @@ const CreateModuleModal = ({ isOpen, onClose, onSuccess, programmeId }) => {
     setLoading(true);
     try {
       const vht = calculateVHT();
-      const response = await fetch('/api/modules/create', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          ...formData,
-          programmeId,
-          cm: parseInt(formData.cm) || 0,
-          td: parseInt(formData.td) || 0,
-          tp: parseInt(formData.tp) || 0,
-          tpe: parseInt(formData.tpe) || 0,
-          vht,
-          coefficient: parseInt(formData.coefficient),
-          credits: parseInt(formData.credits),
-          intervenantId: formData.intervenantId || null,
-          dateDebut: formData.dateDebut ? new Date(formData.dateDebut).toISOString() : null,
-          dateFin: formData.dateFin ? new Date(formData.dateFin).toISOString() : null
-        }),
+      const data = await apiClient.modules.create({
+        ...formData,
+        programmeId,
+        cm: parseInt(formData.cm) || 0,
+        td: parseInt(formData.td) || 0,
+        tp: parseInt(formData.tp) || 0,
+        tpe: parseInt(formData.tpe) || 0,
+        vht,
+        coefficient: parseInt(formData.coefficient),
+        credits: parseInt(formData.credits),
+        intervenantId: formData.intervenantId || null,
+        dateDebut: formData.dateDebut ? new Date(formData.dateDebut).toISOString() : null,
+        dateFin: formData.dateFin ? new Date(formData.dateFin).toISOString() : null
       });
 
-      const data = await response.json();
-
-      if (response.ok) {
-        onSuccess && onSuccess(data.module);
-        onClose();
-        // Reset form
-        setFormData({
-          code: '',
-          name: '',
-          description: '',
-          cm: 0,
-          td: 0,
-          tp: 0,
-          tpe: 0,
-          coefficient: 1,
-          credits: 1,
-          intervenantId: '',
-          dateDebut: '',
-          dateFin: '',
-          status: 'PLANIFIE'
-        });
-      } else {
-        if (data.errors) {
-          setErrors(data.errors);
-        } else {
-          setErrors({ general: data.error || 'Erreur lors de la création du module' });
-        }
-      }
+      onSuccess && onSuccess(data.module || data);
+      onClose();
+      setFormData({
+        code: '',
+        name: '',
+        description: '',
+        cm: 0,
+        td: 0,
+        tp: 0,
+        tpe: 0,
+        coefficient: 1,
+        credits: 1,
+        intervenantId: '',
+        dateDebut: '',
+        dateFin: '',
+        status: 'PLANIFIE'
+      });
     } catch (error) {
-      setErrors({ general: 'Erreur de connexion. Veuillez réessayer.' });
+      if (error.errors) {
+        setErrors(error.errors);
+      } else {
+        setErrors({ general: error.message || 'Erreur lors de la création du module' });
+      }
     } finally {
       setLoading(false);
     }
@@ -163,7 +153,6 @@ const CreateModuleModal = ({ isOpen, onClose, onSuccess, programmeId }) => {
 
   const handleChange = (field, value) => {
     setFormData(prev => ({ ...prev, [field]: value }));
-    // Clear error when user starts typing
     if (errors[field]) {
       setErrors(prev => ({ ...prev, [field]: null }));
     }
@@ -175,13 +164,16 @@ const CreateModuleModal = ({ isOpen, onClose, onSuccess, programmeId }) => {
 
   return (
     <>
-      {/* Overlay */}
-      <div className="fixed inset-0 bg-grey bg-opacity-1 backdrop-blur-sm z-40" onClick={onClose}></div>
+      {/* Overlay - z-30: behind table but in front of main content */}
+      <div 
+        className="fixed inset-0 bg-black/50 z-30" 
+        onClick={onClose}
+      ></div>
       
-      {/* Modal Container */}
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-        <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
-          {/* Header */}
+      {/* Modal Container - z-35: in front of overlay, behind top elements */}
+      <div className="fixed inset-0 z-35 flex items-center justify-center p-4 pointer-events-none">
+        <div className="bg-white rounded-lg shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto pointer-events-auto">
+          {/* Header - Sticky */}
           <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-white sticky top-0 z-10 rounded-t-lg">
             <div className="flex items-center space-x-2">
               <BookOpen className="h-6 w-6 text-blue-600" />
@@ -197,7 +189,7 @@ const CreateModuleModal = ({ isOpen, onClose, onSuccess, programmeId }) => {
             </button>
           </div>
 
-          {/* Form */}
+          {/* Form Content */}
           <form onSubmit={handleSubmit} className="p-6">
             {/* Error général */}
             {errors.general && (

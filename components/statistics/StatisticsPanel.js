@@ -2,6 +2,8 @@
 // Composant de visualisation des statistiques avancées
 
 import { useState, useEffect } from 'react';
+import { useSession } from 'next-auth/react';
+import apiClient from '../../lib/api-client';
 import {
   BarChart3,
   TrendingUp,
@@ -14,7 +16,8 @@ import {
   PieChart,
   ArrowUpRight,
   ArrowDownRight,
-  Loader2
+  Loader2,
+  Sparkles
 } from 'lucide-react';
 
 // Composant de carte statistique avec tendance
@@ -141,29 +144,29 @@ function KPIAlert({ type, message, suggestion }) {
 
 // Composant principal du panneau de statistiques
 export default function StatisticsPanel({ type = 'global' }) {
+  const { data: session } = useSession();
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    fetchStatistics();
-  }, [type]);
+    if (session?.accessToken) {
+      apiClient.setToken(session.accessToken);
+      fetchStatistics();
+    }
+  }, [type, session]);
 
   const fetchStatistics = async () => {
     setLoading(true);
     setError(null);
 
     try {
-      const response = await fetch(`/api/statistics?type=${type}`);
-
-      if (!response.ok) {
-        throw new Error('Erreur lors du chargement des statistiques');
-      }
-
-      const data = await response.json();
+      const data = await apiClient.statistics.getAll({ type });
+      console.log('Statistics data:', data);
       setStats(data.statistics);
     } catch (err) {
-      setError(err.message);
+      console.error('Erreur fetch statistics:', err);
+      setError(err.message || 'Erreur lors du chargement des statistiques');
     } finally {
       setLoading(false);
     }
@@ -225,7 +228,8 @@ function GlobalStats({ stats }) {
         />
         <StatCard
           title="Intervenants"
-          value={stats.totaux?.intervenants || 0}
+          value={stats.totaux?.intervenants || stats.intervenants?.total || 0}
+          subtitle={`${stats.intervenants?.disponibles || 0} disponible(s)`}
           icon={Users}
           color="green"
         />
@@ -237,6 +241,34 @@ function GlobalStats({ stats }) {
           color="indigo"
         />
       </div>
+
+      {/* Nouveaux ce mois */}
+      {stats.nouveauxCeMois && (
+        <div className="bg-gradient-to-r from-emerald-50 to-teal-50 rounded-lg border border-emerald-200 p-4">
+          <h3 className="font-semibold text-emerald-900 mb-3 flex items-center gap-2">
+            <Sparkles className="w-5 h-5 text-emerald-600" />
+            Nouveaux ce mois
+          </h3>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="text-center">
+              <p className="text-2xl font-bold text-emerald-600">{stats.nouveauxCeMois.programmes || 0}</p>
+              <p className="text-xs text-emerald-700">Programmes</p>
+            </div>
+            <div className="text-center">
+              <p className="text-2xl font-bold text-emerald-600">{stats.nouveauxCeMois.modules || 0}</p>
+              <p className="text-xs text-emerald-700">Modules</p>
+            </div>
+            <div className="text-center">
+              <p className="text-2xl font-bold text-emerald-600">{stats.nouveauxCeMois.intervenants || 0}</p>
+              <p className="text-xs text-emerald-700">Intervenants</p>
+            </div>
+            <div className="text-center">
+              <p className="text-2xl font-bold text-emerald-600">{stats.nouveauxCeMois.seances || 0}</p>
+              <p className="text-xs text-emerald-700">Seances</p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Section heures et qualite */}
       <div className="grid md:grid-cols-2 gap-6">
@@ -262,31 +294,68 @@ function GlobalStats({ stats }) {
           </div>
         </div>
 
-        {/* Qualite */}
+        {/* Intervenants */}
         <div className="bg-white rounded-lg border p-4">
           <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
-            <Activity className="w-5 h-5 text-green-600" />
-            Indicateurs Qualite
+            <Users className="w-5 h-5 text-green-600" />
+            Disponibilite Intervenants
           </h3>
           <div className="space-y-4">
             <div className="flex justify-between items-center">
-              <span className="text-gray-600">Progression moyenne</span>
+              <span className="text-gray-600">Taux de disponibilite</span>
               <span className="text-2xl font-bold text-green-600">
+                {stats.intervenants?.tauxDisponibilite || 100}%
+              </span>
+            </div>
+            <ProgressBar
+              label="Intervenants disponibles"
+              value={stats.intervenants?.disponibles || 0}
+              max={stats.intervenants?.total || stats.totaux?.intervenants || 1}
+              color="green"
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Qualite */}
+      <div className="bg-white rounded-lg border p-4">
+        <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
+          <Activity className="w-5 h-5 text-purple-600" />
+          Indicateurs Qualite
+        </h3>
+        <div className="grid md:grid-cols-2 gap-4">
+          <div>
+            <div className="flex justify-between items-center mb-2">
+              <span className="text-gray-600">Progression moyenne des modules</span>
+              <span className="text-xl font-bold text-purple-600">
                 {stats.qualite?.progressionMoyenne || 0}%
               </span>
             </div>
-            {stats.qualite?.conflitsEnAttente > 0 && (
-              <div className="flex items-center gap-2 p-2 bg-yellow-50 rounded-lg">
-                <AlertTriangle className="w-4 h-4 text-yellow-600" />
-                <span className="text-sm text-yellow-700">
-                  {stats.qualite.conflitsEnAttente} conflit(s) en attente
-                </span>
+            <div className="w-full bg-gray-200 rounded-full h-2">
+              <div
+                className="h-2 rounded-full bg-purple-500 transition-all duration-300"
+                style={{ width: `${stats.qualite?.progressionMoyenne || 0}%` }}
+              />
+            </div>
+          </div>
+          <div>
+            {stats.qualite?.conflitsEnAttente > 0 ? (
+              <div className="flex items-center gap-2 p-3 bg-yellow-50 rounded-lg border border-yellow-200">
+                <AlertTriangle className="w-5 h-5 text-yellow-600" />
+                <div>
+                  <span className="text-sm font-medium text-yellow-800">
+                    {stats.qualite.conflitsEnAttente} conflit(s) en attente
+                  </span>
+                  <p className="text-xs text-yellow-600">A resoudre rapidement</p>
+                </div>
               </div>
-            )}
-            {stats.qualite?.conflitsEnAttente === 0 && (
-              <div className="flex items-center gap-2 p-2 bg-green-50 rounded-lg">
-                <CheckCircle className="w-4 h-4 text-green-600" />
-                <span className="text-sm text-green-700">Aucun conflit detecte</span>
+            ) : (
+              <div className="flex items-center gap-2 p-3 bg-green-50 rounded-lg border border-green-200">
+                <CheckCircle className="w-5 h-5 text-green-600" />
+                <div>
+                  <span className="text-sm font-medium text-green-800">Aucun conflit detecte</span>
+                  <p className="text-xs text-green-600">Planning optimal</p>
+                </div>
               </div>
             )}
           </div>
@@ -299,6 +368,9 @@ function GlobalStats({ stats }) {
           <div>
             <p className="text-indigo-100 text-sm">Taux de completion global</p>
             <p className="text-4xl font-bold mt-1">{stats.activite?.tauxCompletion || 0}%</p>
+            <p className="text-indigo-200 text-sm mt-2">
+              {stats.activite?.seancesTerminees || 0} seances terminees sur {stats.totaux?.seances || 0}
+            </p>
           </div>
           <div className="w-24 h-24 relative">
             <svg className="w-full h-full transform -rotate-90">
@@ -330,7 +402,10 @@ function GlobalStats({ stats }) {
 
 // Vue des statistiques intervenants
 function IntervenantsStats({ stats }) {
-  if (!stats.intervenants) return null;
+  // S'assurer que intervenants est un tableau
+  const intervenantsList = Array.isArray(stats.intervenants) ? stats.intervenants : [];
+
+  if (intervenantsList.length === 0 && !stats.resume) return null;
 
   return (
     <div className="space-y-6">
@@ -369,7 +444,11 @@ function IntervenantsStats({ stats }) {
           <h3 className="font-semibold text-gray-900">Detail par Intervenant</h3>
         </div>
         <div className="divide-y max-h-96 overflow-y-auto">
-          {stats.intervenants.slice(0, 10).map((intervenant) => (
+          {intervenantsList.length === 0 ? (
+            <div className="p-4 text-center text-gray-500">
+              Aucun intervenant trouve
+            </div>
+          ) : intervenantsList.slice(0, 10).map((intervenant) => (
             <div key={intervenant.id} className="p-4 hover:bg-gray-50">
               <div className="flex items-center justify-between">
                 <div>

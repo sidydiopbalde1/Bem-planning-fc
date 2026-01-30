@@ -1,0 +1,34 @@
+# ============================================
+# Docker Compose - Developpement Local (Frontend)
+# Usage: docker-compose -f docker-compose.dev.yml up
+# ============================================
+
+services:
+  # ============================================
+  # Application Next.js (mode dev avec hot reload)
+  # ============================================
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: bem-planning-dev
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=development
+      - NEXTAUTH_URL=http://localhost:3000
+      - NEXTAUTH_SECRET=dev-secret-key-change-in-production
+      - JWT_SECRET=dev-jwt-secret-change-in-production
+      - API_URL=${API_URL:-http://localhost:4000}
+      - DATABASE_URL=${DATABASE_URL}
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - /app/.next
+    networks:
+      - bem-network
+
+networks:
+  bem-network:
+    driver: bridge

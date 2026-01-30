@@ -1,0 +1,28 @@
+# ============================================
+# Dockerfile pour developpement
+# Hot reload active
+# ============================================
+
+FROM node:20-alpine
+
+RUN apk add --no-cache libc6-compat openssl
+
+WORKDIR /app
+
+# Copier les fichiers de dependances
+COPY package.json package-lock.json* ./
+COPY prisma ./prisma/
+
+# Installer toutes les dependances (y compris devDependencies)
+RUN npm ci --legacy-peer-deps
+
+# Generer le client Prisma
+RUN npx prisma generate
+
+EXPOSE 3000
+
+ENV PORT=3000
+ENV HOSTNAME="0.0.0.0"
+
+# Demarrer en mode developpement (migrations gerees par le backend NestJS)
+CMD ["npm", "run", "dev"]
