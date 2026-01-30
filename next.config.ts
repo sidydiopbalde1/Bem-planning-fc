@@ -1,26 +1,38 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  output: 'standalone', // Optimisation pour Docker
+  output: 'standalone',
+
   images: {
     domains: ['localhost'],
     unoptimized: process.env.NODE_ENV === 'development',
   },
+
   env: {
     CUSTOM_KEY: 'planning-fc',
   },
+
   eslint: {
     ignoreDuringBuilds: true,
   },
+
   typescript: {
     ignoreBuildErrors: true,
   },
-  // Force bundling to fix ESM/CJS default export interop in standalone mode
-  transpilePackages: ['lucide-react', 'next-auth', 'bcryptjs', 'jsonwebtoken', '@next-auth/prisma-adapter'],
-  serverExternalPackages: ['@prisma/client', 'bcryptjs'],
+
+  // ✅ SEUL package à transpiler (UI)
+  transpilePackages: ['lucide-react'],
+
+  // ✅ Packages Node-only
+  serverExternalPackages: [
+    '@prisma/client',
+    'bcryptjs',
+    'jsonwebtoken',
+  ],
+
   experimental: {
     optimizePackageImports: ['lucide-react'],
   },
-}
+};
 
-module.exports = nextConfig
+module.exports = nextConfig;
