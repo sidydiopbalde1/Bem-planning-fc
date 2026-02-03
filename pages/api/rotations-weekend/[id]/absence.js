@@ -1,7 +1,7 @@
 // pages/api/rotations-weekend/[id]/absence.js
 import { getServerSession } from 'next-auth/next';
 import { PrismaClient } from '@prisma/client';
-import { authOptions } from '../../auth/[...nextauth]';
+import { authOptions } from '@/lib/auth';
 import RotationWeekendManager from '../../../../lib/rotation-weekend';
 
 const prisma = new PrismaClient();

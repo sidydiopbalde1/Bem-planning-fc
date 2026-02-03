@@ -1,6 +1,6 @@
 // pages/api/admin/export/excel.js
 import { getServerSession } from 'next-auth/next';
-import { authOptions } from '../../auth/[...nextauth]';
+import { authOptions } from '@/lib/auth';
 import { PrismaClient } from '@prisma/client';
 import * as XLSX from 'xlsx';
 

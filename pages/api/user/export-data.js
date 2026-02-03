@@ -1,7 +1,7 @@
 // pages/api/user/export-data.js
 import { getServerSession } from 'next-auth/next';
 import { PrismaClient } from '@prisma/client';
-import { authOptions } from '../auth/[...nextauth]';
+import { authOptions } from '@/lib/auth';
 
 const prisma = new PrismaClient();
 

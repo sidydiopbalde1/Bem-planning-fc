@@ -2,7 +2,7 @@
 // API de génération et suggestion automatique de créneaux
 import { getServerSession } from 'next-auth/next';
 import { PrismaClient } from '@prisma/client';
-import { authOptions } from '../auth/[...nextauth]';
+import { authOptions } from '@/lib/auth';
 
 const prisma = new PrismaClient();
 
