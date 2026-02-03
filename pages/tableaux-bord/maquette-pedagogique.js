@@ -718,7 +718,7 @@ export async function getServerSideProps(context) {
   }
 
   try {
-    const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002/api';
+    const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || 'https://bem-planning-fc-backend-latest.onrender.com/api';
     const token = session.accessToken;
 
     const headers = {

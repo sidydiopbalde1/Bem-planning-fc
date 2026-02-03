@@ -88,7 +88,8 @@ export default function RapportsManagement() {
   };
 
   const handleExport = (type) => {
-    const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002/api';
+    // const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002/api';
+    const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || 'https://bem-planning-fc-backend-latest.onrender.com/api';
     const params = new URLSearchParams({ type });
     if (dateDebut) params.append('dateDebut', dateDebut);
     if (dateFin) params.append('dateFin', dateFin);
