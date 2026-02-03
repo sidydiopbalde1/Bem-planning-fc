@@ -21,6 +21,8 @@ export default function EvaluationDetailsPage() {
   const [actionLoading, setActionLoading] = useState(false);
   const [confirmModal, setConfirmModal] = useState({ isOpen: false, type: 'confirm', title: '', message: '', onConfirm: null });
   const [alertModal, setAlertModal] = useState({ isOpen: false, type: 'success', title: '', message: '' });
+  const [editingLink, setEditingLink] = useState(false);
+  const [newLink, setNewLink] = useState('');
 
   useEffect(() => {
     if (status === 'unauthenticated') {
@@ -111,6 +113,36 @@ export default function EvaluationDetailsPage() {
         }
       }
     });
+  };
+
+  const handleEditLink = () => {
+    setNewLink(evaluation.lienEvaluation || '');
+    setEditingLink(true);
+  };
+
+  const handleSaveLink = async () => {
+    if (!newLink.trim()) return;
+    setActionLoading(true);
+    try {
+      await apiClient.evaluations.update(id, { lienEvaluation: newLink.trim() });
+      setEditingLink(false);
+      setAlertModal({
+        isOpen: true,
+        type: 'success',
+        title: 'Lien mis a jour',
+        message: 'Le lien d\'evaluation a ete mis a jour avec succes !'
+      });
+      fetchEvaluation();
+    } catch (error) {
+      setAlertModal({
+        isOpen: true,
+        type: 'error',
+        title: 'Erreur',
+        message: error.message || 'Impossible de mettre a jour le lien'
+      });
+    } finally {
+      setActionLoading(false);
+    }
   };
 
   const copyLinkToClipboard = () => {
@@ -294,41 +326,91 @@ export default function EvaluationDetailsPage() {
             {/* Lien d'évaluation */}
             {evaluation.lienEvaluation && (
               <div className="bg-white rounded-lg shadow p-6">
-                <h2 className="text-lg font-bold text-gray-900 mb-4">Lien d'Évaluation</h2>
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-lg font-bold text-gray-900">Lien d'Evaluation</h2>
+                  {evaluation.statut === 'BROUILLON' && !editingLink && (
+                    <button
+                      onClick={handleEditLink}
+                      className="flex items-center px-3 py-1 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
+                    >
+                      <Edit className="w-4 h-4 mr-1" />
+                      Modifier
+                    </button>
+                  )}
+                </div>
 
                 <div className="bg-gray-50 rounded-lg p-4 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-gray-700 mb-1">URL publique</p>
-                      <p className="text-sm text-gray-600 truncate">
-                        {evaluation.lienEvaluation}
+                  {editingLink ? (
+                    <>
+                      <div>
+                        <label className="text-sm font-medium text-gray-700 mb-1 block">Nouveau lien</label>
+                        <input
+                          type="url"
+                          value={newLink}
+                          onChange={(e) => setNewLink(e.target.value)}
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                          placeholder="https://forms.bem.sn/eval-dev-web"
+                          autoFocus
+                        />
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <button
+                          onClick={handleSaveLink}
+                          disabled={actionLoading || !newLink.trim()}
+                          className="flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm disabled:opacity-50"
+                        >
+                          {actionLoading ? (
+                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                          ) : (
+                            <CheckCircle className="w-4 h-4 mr-2" />
+                          )}
+                          Enregistrer
+                        </button>
+                        <button
+                          onClick={() => setEditingLink(false)}
+                          className="flex items-center px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 text-sm"
+                        >
+                          <XCircle className="w-4 h-4 mr-2" />
+                          Annuler
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="flex items-center justify-between">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-gray-700 mb-1">URL publique</p>
+                          <p className="text-sm text-gray-600 truncate">
+                            {evaluation.lienEvaluation}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center space-x-2">
+                        <button
+                          onClick={copyLinkToClipboard}
+                          className="flex items-center px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 text-sm"
+                        >
+                          <Copy className="w-4 h-4 mr-2" />
+                          Copier le lien
+                        </button>
+
+                        <a
+                          href={evaluation.lienEvaluation}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm"
+                        >
+                          <ExternalLink className="w-4 h-4 mr-2" />
+                          Ouvrir
+                        </a>
+                      </div>
+
+                      <p className="text-xs text-gray-500">
+                        Partagez ce lien avec les etudiants pour qu'ils puissent evaluer le cours.
                       </p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center space-x-2">
-                    <button
-                      onClick={copyLinkToClipboard}
-                      className="flex items-center px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 text-sm"
-                    >
-                      <Copy className="w-4 h-4 mr-2" />
-                      Copier le lien
-                    </button>
-
-                    <a
-                      href={evaluation.lienEvaluation}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm"
-                    >
-                      <ExternalLink className="w-4 h-4 mr-2" />
-                      Ouvrir
-                    </a>
-                  </div>
-
-                  <p className="text-xs text-gray-500">
-                    Partagez ce lien avec les étudiants pour qu'ils puissent évaluer le cours.
-                  </p>
+                    </>
+                  )}
                 </div>
               </div>
             )}

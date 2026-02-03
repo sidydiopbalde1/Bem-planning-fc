@@ -5,7 +5,7 @@ import { useSession } from 'next-auth/react';
 import Layout from '../../../components/layout';
 import ConfirmModal from '../../../components/modals/ConfirmModal';
 import apiClient from '../../../lib/api-client';
-import { ArrowLeft, Calendar, Users, BookOpen, Save, Send } from 'lucide-react';
+import { ArrowLeft, Calendar, Users, BookOpen, Save, Send, ExternalLink } from 'lucide-react';
 import Link from 'next/link';
 
 export default function CreateEvaluationPage() {
@@ -19,7 +19,8 @@ export default function CreateEvaluationPage() {
     intervenantId: '',
     dateDebut: '',
     dateFin: '',
-    nombreInvitations: 0
+    nombreInvitations: 0,
+    lienEvaluation: ''
   });
   const [errors, setErrors] = useState({});
   const [modal, setModal] = useState({ isOpen: false, type: 'success', title: '', message: '', onConfirm: null });
@@ -76,6 +77,10 @@ export default function CreateEvaluationPage() {
 
     if (formData.nombreInvitations < 0) {
       newErrors.nombreInvitations = 'Le nombre doit être positif';
+    }
+
+    if (formData.lienEvaluation && !/^https?:\/\/.+/.test(formData.lienEvaluation)) {
+      newErrors.lienEvaluation = 'Le lien doit être une URL valide (ex: https://forms.bem.sn/eval-dev-web)';
     }
 
     setErrors(newErrors);
@@ -272,6 +277,29 @@ export default function CreateEvaluationPage() {
               </p>
             </div>
 
+            {/* Lien d'évaluation */}
+            <div>
+              <label className="flex items-center text-sm font-medium text-gray-700 mb-2">
+                <ExternalLink className="w-4 h-4 mr-2" />
+                Lien d'évaluation
+              </label>
+              <input
+                type="url"
+                value={formData.lienEvaluation}
+                onChange={(e) => setFormData({ ...formData, lienEvaluation: e.target.value })}
+                className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent ${
+                  errors.lienEvaluation ? 'border-red-500' : 'border-gray-300'
+                }`}
+                placeholder="https://forms.bem.sn/eval-dev-web"
+              />
+              {errors.lienEvaluation && (
+                <p className="text-red-500 text-xs mt-1">{errors.lienEvaluation}</p>
+              )}
+              <p className="text-xs text-gray-500 mt-1">
+                Optionnel. Si vide, un lien unique sera généré automatiquement.
+              </p>
+            </div>
+
             {/* Info Box */}
             <div className="bg-blue-50 border-l-4 border-blue-400 p-4 rounded">
               <div className="flex">
@@ -282,7 +310,7 @@ export default function CreateEvaluationPage() {
                 </div>
                 <div className="ml-3">
                   <p className="text-sm text-blue-700">
-                    La campagne sera créée avec le statut <strong>Brouillon</strong>. Un lien d'évaluation unique sera généré automatiquement. Vous pourrez l'envoyer aux étudiants depuis la page de détails.
+                    La campagne sera créée avec le statut <strong>Brouillon</strong>. Vous pouvez fournir un lien d'évaluation personnalisé (ex: Google Forms, Microsoft Forms) ou laisser le champ vide pour générer un lien unique automatiquement.
                   </p>
                 </div>
               </div>

@@ -106,7 +106,7 @@ async function handleGet(req, res, session) {
 }
 
 async function handlePost(req, res, session) {
-  const { moduleId, intervenantId, dateDebut, dateFin, nombreInvitations } = req.body;
+  const { moduleId, intervenantId, dateDebut, dateFin, nombreInvitations, lienEvaluation: customLink } = req.body;
 
   // Validate required fields
   if (!moduleId || !intervenantId || !dateDebut || !dateFin) {
@@ -144,9 +144,14 @@ async function handlePost(req, res, session) {
     return res.status(404).json({ error: 'Intervenant introuvable' });
   }
 
-  // Generate unique evaluation link
-  const token = crypto.randomBytes(32).toString('hex');
-  const lienEvaluation = `${process.env.NEXTAUTH_URL}/evaluation/${token}`;
+  // Use custom link if provided, otherwise generate a unique one
+  let lienEvaluation;
+  if (customLink && customLink.trim()) {
+    lienEvaluation = customLink.trim();
+  } else {
+    const token = crypto.randomBytes(32).toString('hex');
+    lienEvaluation = `${process.env.NEXTAUTH_URL}/evaluation/${token}`;
+  }
 
   // Create evaluation campaign
   const evaluation = await prisma.evaluationEnseignement.create({

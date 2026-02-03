@@ -49,7 +49,7 @@ export default function NotificationsPage() {
       const data = await apiClient.notifications.getAll(params);
       setNotifications(data.notifications);
       setStats(data.stats);
-      // Normaliser la pagination
+      // Normaliser la paginati on
       if (data.pagination) {
         setPagination({
           ...data.pagination,
@@ -130,7 +130,7 @@ export default function NotificationsPage() {
     if (selectedIds.length === 0) return;
 
     try {
-      await Promise.all(selectedIds.map(id => apiClient.notifications.markAsRead(id)));
+      await Promise.all(selectedIds.map(id => apiClient.notifications.markAsRead([id])));
       setSelectedIds([]);
       fetchNotifications();
     } catch (error) {
