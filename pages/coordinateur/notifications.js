@@ -39,29 +39,34 @@ export default function NotificationsPage() {
     setPage(1);
   }, [filter]);
 
-  const fetchNotifications = async () => {
-    try {
-      setLoading(true);
-      const params = { page, limit: 10 };
-      if (filter === 'non_lues') params.lu = 'false';
-      if (filter === 'lues') params.lu = 'true';
+const fetchNotifications = async () => {
+  try {
+    setLoading(true);
 
-      const data = await apiClient.notifications.getAll(params);
-      setNotifications(data.notifications);
-      setStats(data.stats);
-      // Normaliser la paginati on
-      if (data.pagination) {
-        setPagination({
-          ...data.pagination,
-          pages: data.pagination.pages || data.pagination.pages
-        });
-      }
-    } catch (error) {
-      setError(error.message || 'Erreur de connexion au serveur');
-    } finally {
-      setLoading(false);
+    const params = {
+      page,
+      limit: 10,
+    };
+
+    if (filter === 'non_lues') params.lu = false;
+    if (filter === 'lues') params.lu = true;
+
+    const data = await apiClient.notifications.getAll(params);
+
+    setNotifications(data.notifications);
+    setStats(data.stats);
+
+    if (data.pagination) {
+      setPagination(data.pagination);
     }
-  };
+  } catch (error) {
+    setError(error.message || 'Erreur de connexion au serveur');
+  } finally {
+    setLoading(false);
+  }
+};
+
+
 
   const handlePageChange = (newPage) => {
     setPage(newPage);
