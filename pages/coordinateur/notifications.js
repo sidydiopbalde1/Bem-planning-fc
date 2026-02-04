@@ -215,15 +215,15 @@ export default function NotificationsPage() {
             </button>
             <button
               onClick={() => setFilter('non_lues')}
-              className={`px-4 py-2 rounded-lg ${filter === 'non_lues' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+              className={`px-4 py-2 rounded-lg ${filter == 'non_lues' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
             >
               Non lues ({stats?.unread || 0})
             </button>
             <button
               onClick={() => setFilter('lues')}
-              className={`px-4 py-2 rounded-lg ${filter === 'lues' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+              className={`px-4 py-2 rounded-lg ${filter == 'lues' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
             >
-              Lues
+              Lues ({(stats?.total || 0) - (stats?.unread || 0)})
             </button>
           </div>
         </div>
