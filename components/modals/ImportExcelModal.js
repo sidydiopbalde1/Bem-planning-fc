@@ -1,13 +1,15 @@
 // components/modals/ImportExcelModal.js
 import { useState, useRef } from 'react';
 import { X, Upload, FileSpreadsheet, Download, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
+import * as XLSX from 'xlsx';
+import apiClient from '@/lib/api-client';
 
 export default function ImportExcelModal({
   isOpen,
   onClose,
   onImportSuccess,
   templateUrl,
-  entityType = 'programmes', // 'programmes', 'intervenants', 'seances'
+  entityType = 'programmes',
   title = 'Importer depuis Excel',
   subtitle = 'Programme et modules'
 }) {
@@ -77,6 +79,41 @@ export default function ImportExcelModal({
     handleFileSelect(selectedFile);
   };
 
+  const parseExcelFile = (file) => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const data = new Uint8Array(e.target.result);
+          const workbook = XLSX.read(data, { type: 'array' });
+
+          // Vérifier que les feuilles nécessaires existent
+          if (!workbook.SheetNames.includes('Programme') || !workbook.SheetNames.includes('Modules')) {
+            reject(new Error('Le fichier doit contenir deux feuilles: "Programme" et "Modules"'));
+            return;
+          }
+
+          const programmeSheet = workbook.Sheets['Programme'];
+          const modulesSheet = workbook.Sheets['Modules'];
+
+          const programmeRows = XLSX.utils.sheet_to_json(programmeSheet);
+          const modulesRows = XLSX.utils.sheet_to_json(modulesSheet);
+
+          if (!programmeRows || programmeRows.length === 0) {
+            reject(new Error('Aucune donnée de programme trouvée dans la feuille "Programme"'));
+            return;
+          }
+
+          resolve({ programmeData: programmeRows[0], modulesData: modulesRows });
+        } catch (err) {
+          reject(new Error('Erreur lors de la lecture du fichier Excel: ' + err.message));
+        }
+      };
+      reader.onerror = () => reject(new Error('Erreur lors de la lecture du fichier'));
+      reader.readAsArrayBuffer(file);
+    });
+  };
+
   const handleUpload = async () => {
     if (!file) {
       setError('Veuillez sélectionner un fichier');
@@ -88,31 +125,75 @@ export default function ImportExcelModal({
     setSuccess('');
 
     try {
-      const formData = new FormData();
-      formData.append('file', file);
+      // Parser le fichier Excel côté client
+      const { programmeData, modulesData } = await parseExcelFile(file);
 
-      const response = await fetch(`/api/${entityType}/import`, {
-        method: 'POST',
-        body: formData,
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Erreur lors de l\'importation');
+      // Validation des champs requis du programme
+      const requiredFields = ['code', 'name', 'semestre', 'niveau', 'dateDebut', 'dateFin'];
+      const missingFields = requiredFields.filter(field => !programmeData[field]);
+      if (missingFields.length > 0) {
+        throw new Error(`Champs manquants dans la feuille Programme: ${missingFields.join(', ')}`);
       }
 
-      setSuccess(data.message || 'Importation réussie !');
+      // Validation des modules
+      if (!modulesData || modulesData.length === 0) {
+        throw new Error('Aucun module trouvé dans la feuille "Modules"');
+      }
+
+      const moduleRequiredFields = ['code', 'name', 'cm', 'td', 'tp', 'tpe', 'coefficient', 'credits'];
+      for (let i = 0; i < modulesData.length; i++) {
+        const mod = modulesData[i];
+        const missingModuleFields = moduleRequiredFields.filter(field =>
+          mod[field] === undefined || mod[field] === null || mod[field] === ''
+        );
+        if (missingModuleFields.length > 0) {
+          throw new Error(`Module ligne ${i + 2}: Champs manquants: ${missingModuleFields.join(', ')}`);
+        }
+      }
+
+      // Préparer les modules avec calcul du VHT
+      const modules = modulesData.map(mod => {
+        const cm = parseInt(mod.cm) || 0;
+        const td = parseInt(mod.td) || 0;
+        const tp = parseInt(mod.tp) || 0;
+        const tpe = parseInt(mod.tpe) || 0;
+        return {
+          code: mod.code,
+          name: mod.name,
+          description: mod.description || '',
+          cm,
+          td,
+          tp,
+          tpe,
+          vht: cm + td + tp + tpe,
+          coefficient: parseInt(mod.coefficient) || 1,
+          credits: parseInt(mod.credits) || 1,
+        };
+      });
+
+      // Appeler l'API backend de création de programme
+      const result = await apiClient.programmes.create({
+        name: programmeData.name,
+        code: programmeData.code,
+        description: programmeData.description || '',
+        semestre: programmeData.semestre,
+        niveau: programmeData.niveau,
+        dateDebut: programmeData.dateDebut,
+        dateFin: programmeData.dateFin,
+        modules,
+      });
+
+      setSuccess(`Programme "${result.name || programmeData.name}" importé avec succès (${modules.length} modules)`);
       setFile(null);
 
       // Notifier le parent après 2 secondes
       setTimeout(() => {
-        onImportSuccess?.(data.data);
+        onImportSuccess?.(result);
         handleClose();
       }, 2000);
 
     } catch (err) {
-      console.error('Erreur upload:', err);
+      console.error('Erreur import:', err);
       setError(err.message || 'Erreur lors de l\'importation du fichier');
     } finally {
       setUploading(false);
@@ -141,7 +222,7 @@ export default function ImportExcelModal({
       <div className="flex min-h-screen items-center justify-center p-4">
         {/* Overlay */}
         <div
-          className="fixed inset-0 bg-black bg-opacity-50 transition-opacity"
+          className="fixed inset-0 bg-black/50 bg-opacity-50 transition-opacity"
           onClick={handleClose}
         />
 
