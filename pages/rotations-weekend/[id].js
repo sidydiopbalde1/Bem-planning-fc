@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 
 export default function RotationDetailPage() {
-  const { data: session } = useSession();
+  const { data: session, status } = useSession();
   const router = useRouter();
   const { id } = router.query;
 
