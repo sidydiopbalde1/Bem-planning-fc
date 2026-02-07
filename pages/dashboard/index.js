@@ -41,6 +41,13 @@ export default function Dashboard({ initialProgrammes, initialStats, initialActi
     }
   }, [status, router]);
 
+  // Synchroniser le token de session avec l'apiClient
+  useEffect(() => {
+    if (session?.accessToken) {
+      apiClient.setToken(session.accessToken);
+    }
+  }, [session]);
+
   const fetchProgrammes = async (search = '', statusFilter = 'all') => {
     if (!session?.accessToken) {
       return; // Ne pas faire de requête si pas de session
@@ -79,12 +86,14 @@ export default function Dashboard({ initialProgrammes, initialStats, initialActi
       return; // Ne pas faire de requête si pas de token
     }
 
+
     setActivitiesLoading(true);
     try {
-      const data = await apiClient.get('/activities/recent', { limit: 5 });
+      const data = await apiClient.get('/activities/recent', { limit: 10 });
       setActivities(data.activities || []);
     } catch (error) {
       console.error('Erreur fetch activités:', error);
+      console.error('Détails de l\'erreur:', error.response?.data || error.message);
     } finally {
       setActivitiesLoading(false);
     }

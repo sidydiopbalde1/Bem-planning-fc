@@ -143,12 +143,10 @@ export default function Layout({ children, title = "Planning FC" }) {
 
       {/* Mobile sidebar overlay */}
       {sidebarOpen && (
-        <div className="fixed inset-0 z-50 lg:hidden">
-          <div 
-            className="fixed inset-0 bg-gray-900 bg-opacity-50" 
-            onClick={() => setSidebarOpen(false)} 
-          />
-        </div>
+        <div
+          className="fixed inset-0 z-40 bg-black/50 lg:hidden"
+          onClick={() => setSidebarOpen(false)}
+        />
       )}
 
       <div className="flex h-full">

@@ -92,7 +92,7 @@ export default async function handler(req, res) {
         status: { notIn: ['ANNULE', 'TERMINE'] },
         OR: [
           { dateDebut: { gte: now, lte: quatorzJours } },
-          { dateDebut: null } // Include modules without start date
+          { dateDebut: null } 
         ]
       },
       include: {
