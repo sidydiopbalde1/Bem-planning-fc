@@ -14,24 +14,25 @@ import { notifyAllSeancesNonTerminees } from '../../../lib/notifications';
  * 0 18 * * * curl -X POST https://yourdomain.com/api/cron/check-unfinished-sessions?key=YOUR_SECRET_KEY
  */
 export default async function handler(req, res) {
-  // Verify cron secret key
-  const cronSecret = process.env.CRON_SECRET_KEY;
+  if (req.method !== 'POST' && req.method !== 'GET') {
+    return res.status(405).json({ error: 'Méthode non autorisée' });
+  }
 
+  // Vérifier l'authentification : Vercel envoie "Authorization: Bearer <CRON_SECRET>"
+  const cronSecret = process.env.CRON_SECRET;
   if (!cronSecret) {
-    console.error('CRON_SECRET_KEY not configured');
+    console.error('CRON_SECRET not configured');
     return res.status(500).json({ error: 'Cron not configured' });
   }
 
-  // Check authorization
-  const providedKey = req.query.key || req.headers['x-cron-key'];
+  const authHeader = req.headers.authorization;
+  const queryKey = req.query.key;
+  const isAuthorized =
+    authHeader === `Bearer ${cronSecret}` || queryKey === cronSecret;
 
-  if (providedKey !== cronSecret) {
+  if (!isAuthorized) {
     console.error('Unauthorized cron request');
     return res.status(401).json({ error: 'Unauthorized' });
-  }
-
-  if (req.method !== 'POST' && req.method !== 'GET') {
-    return res.status(405).json({ error: 'Méthode non autorisée' });
   }
 
   try {

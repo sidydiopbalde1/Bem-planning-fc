@@ -9,16 +9,23 @@ const prisma = new PrismaClient();
 
 export default async function handler(req, res) {
   try {
-    // Verify cron secret to prevent unauthorized access
-    const authHeader = req.headers.authorization;
-    const expectedSecret = process.env.CRON_SECRET || 'change-me-in-production';
-
-    if (!authHeader || authHeader !== `Bearer ${expectedSecret}`) {
-      return res.status(401).json({ error: 'Non autorisé' });
+    if (req.method !== 'POST' && req.method !== 'GET') {
+      return res.status(405).json({ error: 'Méthode non autorisée' });
     }
 
-    if (req.method !== 'POST') {
-      return res.status(405).json({ error: 'Méthode non autorisée' });
+    // Vérifier l'authentification : Vercel envoie "Authorization: Bearer <CRON_SECRET>"
+    const cronSecret = process.env.CRON_SECRET;
+    if (!cronSecret) {
+      return res.status(500).json({ error: 'Cron not configured' });
+    }
+
+    const authHeader = req.headers.authorization;
+    const queryKey = req.query.key;
+    const isAuthorized =
+      authHeader === `Bearer ${cronSecret}` || queryKey === cronSecret;
+
+    if (!isAuthorized) {
+      return res.status(401).json({ error: 'Non autorisé' });
     }
 
     const now = new Date();
