@@ -11,12 +11,10 @@ import {
   ChevronLeft, 
   ChevronRight, 
   Plus, 
-  Filter,
   Clock,
   Users,
   MapPin,
   BookOpen,
-  AlertCircle,
   Eye
 } from 'lucide-react';
 
@@ -63,10 +61,16 @@ const Calendar = () => {
         apiClient.seances.getAll(),
         apiClient.programmes.getAll()
       ]);
-      console.log('Seances data:', seancesData);
-      console.log('Programmes data:', programmesData);
-      setSeances(Array.isArray(seancesData?.seances) ? seancesData.seances : Array.isArray(seancesData) ? seancesData : []);
-      setProgrammes(Array.isArray(programmesData?.data) ? programmesData.data : Array.isArray(programmesData) ? programmesData.data : []);
+      console.log('Seances data brut:', JSON.stringify(seancesData).substring(0, 500));
+      console.log('Programmes data brut:', JSON.stringify(programmesData).substring(0, 500));
+      // Debug: voir le format exact de dateSeance
+      const extractedSeances = Array.isArray(seancesData?.data) ? seancesData.data : Array.isArray(seancesData) ? seancesData : [];
+      if (extractedSeances.length > 0) {
+        console.log('Première séance dateSeance:', extractedSeances[0].dateSeance, 'type:', typeof extractedSeances[0].dateSeance);
+      }
+      console.log('Nombre de séances extraites:', extractedSeances.length);
+      setSeances(extractedSeances);
+      setProgrammes(Array.isArray(programmesData?.data) ? programmesData.data : Array.isArray(programmesData) ? programmesData : []);
     } catch (error) {
       console.error('Erreur fetch:', error.message || error);
     } finally {
@@ -96,14 +100,40 @@ const Calendar = () => {
     return days;
   };
 
-  // Obtenir les séances pour une date donnée
-  const getSeancesForDate = (date) => {
-    return seances.filter(seance => {
-      const seanceDate = new Date(seance.dateSeance);
-      return seanceDate.toDateString() === date.toDateString();
-    });
+  // Helper pour extraire YYYY-MM-DD sans problème de timezone
+  const toDateKey = (date) => {
+    if (typeof date === 'string') {
+      // Extraire directement depuis la chaîne ISO pour éviter le décalage timezone
+      return date.substring(0, 10);
+    }
+    const d = date instanceof Date ? date : new Date(date);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   };
 
+  // Appliquer les filtres sur les séances
+  const filteredSeances = seances.filter(seance => {
+   // console.log('Seance:', seance.module?.programme?.id, 'Filter:', filters.programme);
+    if (filters.programme !== 'all' && seance.module?.programme?.id !== filters.programme) {
+      return false;
+    }
+    if (filters.status !== 'all' && seance.status !== filters.status) {
+      return false;
+    }
+    if (filters.intervenant !== 'all' && seance.intervenant?.id !== filters.intervenant) {
+      return false;
+    }
+    return true;
+  });
+
+  // Obtenir les séances filtrées pour une date donnée
+  const getSeancesForDate = (date) => {
+    // console.log('Checking seances for date:', date);
+    const dateKey = toDateKey(date);
+    // console.log('Date key:', dateKey);
+    return filteredSeances.filter(seance => toDateKey(seance.dateSeance) === dateKey);
+  };
+  // console.log('Seances filtrés:', getSeancesForDate(date));
+// console.log('Filtered seances:', filteredSeances);
   // Navigation du calendrier
   const navigateCalendar = (direction) => {
     const newDate = new Date(currentDate);
@@ -285,7 +315,7 @@ const Calendar = () => {
                 const isCurrentMonth = day.getMonth() === currentMonth;
                 const isToday = day.toDateString() === new Date().toDateString();
                 const daySeances = getSeancesForDate(day);
-                
+                // console.log('Day:', day, 'Seances:', daySeances);
                 return (
                   <div
                     key={index}

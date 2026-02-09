@@ -54,7 +54,7 @@ export default function CalendarView({
         onSeanceClick(seance);
       }}
     >
-      <div className="font-semibold truncate">{seance.module.name}</div>
+      <div className="font-semibold limittruncate">{seance.module.name}</div>
       <div className="flex items-center mt-1 opacity-90">
         <Clock className="h-3 w-3 mr-1" />
         {formatTime(seance.heureDebut)} - {formatTime(seance.heureFin)}
