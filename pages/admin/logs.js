@@ -44,6 +44,11 @@ export default function LogsManagement() {
     }
   }, [status, session, router]);
 
+  // Reset page à 1 quand les filtres changent
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedSearchTerm, actionFilter, entiteFilter, dateDebut, dateFin]);
+
   useEffect(() => {
     if (status === 'authenticated' && session?.user?.role === 'ADMIN') {
       fetchLogs();
@@ -61,14 +66,17 @@ export default function LogsManagement() {
       if (debouncedSearchTerm) params.search = debouncedSearchTerm;
       if (actionFilter) params.action = actionFilter;
       if (entiteFilter) params.entite = entiteFilter;
-      if (dateDebut) params.dateDebut = dateDebut;
-      if (dateFin) params.dateFin = dateFin;
+      // Filtrer sur createdAt (backend attend startDate/endDate)
+      if (dateDebut) params.startDate = dateDebut;
+      if (dateFin) params.endDate = dateFin;
 
-      const data = await apiClient.admin.getLogs(params);
-      console.log('Données des logs:', data);
-      setLogs(data.logs || []);
-      setStats(data.stats || {});
-      setPagination(data.pagination || {});
+      const response = await apiClient.admin.getLogs(params);
+      console.log('Données des logs:', response);
+      // Gérer les deux formats possibles : { logs, stats, pagination } ou { data: { logs, stats, pagination } }
+      const data = response?.data || response;
+      setLogs(data?.logs || (Array.isArray(data) ? data : []));
+      setStats(data?.stats || {});
+      setPagination(data?.pagination || {});
     } catch (error) {
       console.error('Erreur lors du chargement des logs:', error);
     } finally {
@@ -124,8 +132,9 @@ export default function LogsManagement() {
     );
   }
 
-  const uniqueEntites = [...new Set(stats.byEntite?.map(e => e.entite) || [])];
-
+  const uniqueEntites = [...new Set(stats.byEntities?.map(e => e.entite) || [])];
+  console.log("Entités logs",stats, uniqueEntites);
+  
   return (
     <PageTransition>
       <Layout>
@@ -184,7 +193,7 @@ export default function LogsManagement() {
                   <div>
                     <p className="text-sm text-gray-600 dark:text-gray-400">Utilisateurs actifs</p>
                     <p className="text-2xl font-bold text-green-600">
-                      {stats.uniqueUsers || 0}
+                      {stats.actifusers?.length || 0}
                     </p>
                   </div>
                   <User className="w-10 h-10 text-green-400" />
@@ -198,7 +207,7 @@ export default function LogsManagement() {
                   <div>
                     <p className="text-sm text-gray-600 dark:text-gray-400">Types d'actions</p>
                     <p className="text-2xl font-bold text-purple-600">
-                      {stats.byAction?.length || 0}
+                      {stats.typesActions?.length || 0}
                     </p>
                   </div>
                   <Database className="w-10 h-10 text-purple-400" />
@@ -435,9 +444,9 @@ function LogDetailModal({ log, onClose }) {
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto">
       <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
-        <div className="fixed inset-0 bg-gray-500 bg-opacity-75" onClick={onClose}></div>
+        <div className="fixed inset-0  bg-black/50 bg-opacity-75" onClick={onClose}></div>
         <span className="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
-        <div className="inline-block align-bottom bg-white dark:bg-gray-800 rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-3xl sm:w-full"
+        <div className="relative z-10 inline-block align-bottom bg-white dark:bg-gray-800 rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-3xl sm:w-full"
           onClick={(e) => e.stopPropagation()}
         >
           <div className="px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
