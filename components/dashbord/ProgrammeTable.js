@@ -60,10 +60,10 @@ const ProgrammeTable = ({ programmes = [], loading = false, onProgrammeUpdate })
     );
   }
 
+  console.log('Programmes prop in ProgrammeTable:', programmes);
   // Ensure programmes is always an array
-  const programmesList = Array.isArray(programmes.data) ? programmes.data : [];
-  console.log('Programme List in ProgrammeTable:', programmesList);
-  if (programmesList.length === 0) {
+
+  if (programmes.length === 0) {
     return (
       <div className="bg-white rounded-lg border border-gray-200 shadow-sm">
         <div className="p-8 text-center">
@@ -87,7 +87,7 @@ const ProgrammeTable = ({ programmes = [], loading = false, onProgrammeUpdate })
     <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
       <div className="px-6 py-4 border-b border-gray-200">
         <h3 className="text-lg font-semibold text-gray-900">Programmes de Formation</h3>
-        <p className="text-sm text-gray-600 mt-1">{programmesList.length} programme(s) au total</p>
+        <p className="text-sm text-gray-600 mt-1">{programmes.length} programme(s) au total</p>
       </div>
 
       <div className="overflow-x-auto">
@@ -115,7 +115,7 @@ const ProgrammeTable = ({ programmes = [], loading = false, onProgrammeUpdate })
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
-            {programmesList.map((programme) => (
+            {programmes.map((programme) => (
               <tr key={programme.id} className="hover:bg-gray-50 transition-colors">
                 <td className="px-6 py-4 whitespace-nowrap">
                   <div>
@@ -185,12 +185,12 @@ const ProgrammeTable = ({ programmes = [], loading = false, onProgrammeUpdate })
         </table>
       </div>
 
-      {programmesList.length > 10 && (
+      {programmes.length > 10 && (
         <div className="px-6 py-4 border-t border-gray-200 bg-gray-50">
           <div className="flex items-center justify-between">
             <p className="text-sm text-gray-700">
               Affichage de <span className="font-medium">1</span> à <span className="font-medium">10</span> sur{' '}
-              <span className="font-medium">{programmesList.length}</span> résultats
+              <span className="font-medium">{programmes.length}</span> résultats
             </p>
             <div className="flex space-x-2">
               <button className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-100 transition-colors">

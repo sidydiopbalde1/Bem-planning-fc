@@ -4,10 +4,9 @@ import { useRouter } from 'next/router';
 import Head from 'next/head';
 import Link from 'next/link';
 import Layout from '../../components/layout.js';
-import StatCard from '../../components/ui/StatCard.js';
 import ProgrammeTable from '../../components/dashbord/ProgrammeTable.js';
 import CreateProgrammeModal from '../../components/modals/CreateProgrammeModal.js';
-import PageTransition, { AnimatedCard, AnimatedButton, AnimatedStats, SlideIn, FadeIn } from '../../components/ui/PageTransition.js';
+import { AnimatedCard, AnimatedButton, AnimatedStats, SlideIn, FadeIn } from '../../components/ui/PageTransition.js';
 import { Calendar, Clock, Users, BookOpen, AlertTriangle, Plus, Search, TrendingUp, Activity } from 'lucide-react';
 import apiClient from '../../lib/api-client';
 import { useLanguage } from '../../contexts/LanguageContext';
@@ -15,7 +14,7 @@ import { useLanguage } from '../../contexts/LanguageContext';
 export default function Dashboard({ initialProgrammes, initialStats, initialActivities }) {
   const { data: session, status } = useSession();
   const router = useRouter();
-  const { t, language } = useLanguage();
+  const { t } = useLanguage();
   const [programmes, setProgrammes] = useState(initialProgrammes || []);
   const [stats, setStats] = useState(initialStats || {});
   const [activities, setActivities] = useState(initialActivities || []);
@@ -26,13 +25,16 @@ export default function Dashboard({ initialProgrammes, initialStats, initialActi
   const [showCreateModal, setShowCreateModal] = useState(false);
 
   console.log('Initial Programmes:', initialProgrammes);
+  console.log('Initial Stats:', stats);
   const handleProgrammeCreated = (newProgramme) => {
+    // console.log('New Programme:', newProgramme);
     setProgrammes(prev => [newProgramme, ...prev]);
     setStats(prev => ({
       ...prev,
       programmesActifs: prev.programmesActifs + (newProgramme.status === 'EN_COURS' ? 1 : 0),
       nouveauxCeMois: prev.nouveauxCeMois + 1
     }));
+
   };
 
   useEffect(() => {
@@ -60,7 +62,8 @@ export default function Dashboard({ initialProgrammes, initialStats, initialActi
       if (statusFilter !== 'all') params.status = statusFilter;
 
       const data = await apiClient.programmes.getAll(params);
-      setProgrammes(data.programmes || data || []);
+      // console.log('Data received:', data);
+      setProgrammes(data.data);
 
     } catch (error) {
       console.error('Erreur fetch:', error);
@@ -105,7 +108,8 @@ export default function Dashboard({ initialProgrammes, initialStats, initialActi
     }
   }, [status, session]);
 
-  if (status === 'loading') {
+  // Ne pas afficher le spinner si on a déjà les données SSR (évite le flash)
+  if (status === 'loading' && !initialProgrammes?.length && !Object.keys(initialStats || {}).length) {
     return (
       <Layout>
         <div className="flex items-center justify-center min-h-screen">
@@ -118,7 +122,8 @@ export default function Dashboard({ initialProgrammes, initialStats, initialActi
     );
   }
 
-  if (!session) return null;
+  // Si pas de session et pas de données SSR, ne rien afficher
+  if (!session && !initialProgrammes?.length && !Object.keys(initialStats || {}).length) return null;
 
   const statsData = [
     {
@@ -126,7 +131,6 @@ export default function Dashboard({ initialProgrammes, initialStats, initialActi
       value: stats.programmesActifs || '0',
       label: t('dashboard.activeProgrammes'),
       color: 'bg-red-100 text-red-600',
-      trend: 'up',
       trendValue: `+${stats.nouveauxCeMois || 0} ${t('dashboard.thisMonth')}`,
     },
     {
@@ -166,7 +170,7 @@ export default function Dashboard({ initialProgrammes, initialStats, initialActi
                 {t('dashboard.title')}
               </h1>
               <p className="text-gray-600 mt-2 text-lg">
-                {t('dashboard.welcome', { name: session.user.name })}
+                {t('dashboard.welcome', { name: session?.user?.name || '' })}
               </p>
             </div>
             <div className="mt-4 lg:mt-0">
@@ -408,25 +412,20 @@ export async function getServerSideProps(context) {
       fetch(`${apiBaseUrl}/activities/recent?limit=5`, { headers }),
     ]);
     
+  
 
-
+   
     const programmesData = programmesRes.ok ? await programmesRes.json() : { programmes: [] };
     const statsData = statsRes.ok ? await statsRes.json() : {};
     const activitiesData = activitiesRes.ok ? await activitiesRes.json() : { activities: [] };
 
-    // console.log('SSR Programmes Data:', programmesData);
-    // console.log('SSR Stats Data:', statsData);
-
+  
+    console.log('Programmes Data:', programmesData);
     // Ensure programmes is always an array
     let programmes = [];
-    if (Array.isArray(programmesData)) {
-      programmes = programmesData;
-    } else if (programmesData && Array.isArray(programmesData.programmes)) {
-      programmes = programmesData.programmes;
-    } else if (programmesData && Array.isArray(programmesData.data)) {
+    if (programmesData && programmesData.data) {
       programmes = programmesData.data;
-      // console.log('Using programmesData.data for programmes', programmes);
-    }
+    } 
 
     // Map the statistics from API response format to dashboard format
     const stats = statsData.statistics || {};

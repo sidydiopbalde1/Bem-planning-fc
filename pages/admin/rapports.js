@@ -6,8 +6,8 @@ import Head from 'next/head';
 import Layout from '../../components/layout.js';
 import PageTransition, { AnimatedCard, SlideIn } from '../../components/ui/PageTransition.js';
 import {
-  BarChart3, Download, Calendar, TrendingUp, Users, DoorClosed,
-  Activity, AlertCircle, CheckCircle, FileText, ArrowUp, ArrowDown
+  BarChart3, Download, Calendar,
+  Activity, AlertCircle, CheckCircle, FileText
 } from 'lucide-react';
 import apiClient from '../../lib/api-client';
 
@@ -88,13 +88,12 @@ export default function RapportsManagement() {
   };
 
   const handleExport = (type) => {
-    // const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002/api';
-    const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || 'https://bem-planning-fc-backend-latest.onrender.com/api';
     const params = new URLSearchParams({ type });
     if (dateDebut) params.append('dateDebut', dateDebut);
     if (dateFin) params.append('dateFin', dateFin);
 
-    window.open(`${apiBaseUrl}/admin/export/excel?${params}`, '_blank');
+    // Utiliser l'API locale Next.js (l'endpoint n'existe pas sur le backend NestJS)
+    window.open(`/api/admin/export/excel?${params}`, '_blank');
   };
 
   if (status === 'loading' || loading) {

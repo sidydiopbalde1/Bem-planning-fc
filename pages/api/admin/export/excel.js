@@ -41,6 +41,9 @@ export default async function handler(req, res) {
       case 'stats-intervenants':
         workbook = await exportStatsIntervenants(req.query);
         break;
+      case 'dashboard':
+        workbook = await exportDashboard();
+        break;
       default:
         return res.status(400).json({ error: 'Type d\'export invalide' });
     }
@@ -239,6 +242,109 @@ async function exportStatsSalles(query) {
   const worksheet = XLSX.utils.json_to_sheet(data);
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, worksheet, 'Statistiques Salles');
+
+  return workbook;
+}
+
+async function exportDashboard() {
+  const [
+    utilisateurs,
+    utilisateursParRole,
+    programmes,
+    programmesParStatut,
+    modules,
+    modulesParStatut,
+    intervenants,
+    intervenantsActifs,
+    salles,
+    sallesDisponibles,
+    seances,
+    seancesParStatut,
+    conflitsNonResolus,
+    conflitsParType,
+    periodeActive
+  ] = await Promise.all([
+    prisma.user.count(),
+    prisma.user.groupBy({ by: ['role'], _count: { role: true } }),
+    prisma.programme.count(),
+    prisma.programme.groupBy({ by: ['status'], _count: { status: true } }),
+    prisma.module.count(),
+    prisma.module.groupBy({ by: ['status'], _count: { status: true } }),
+    prisma.intervenant.count(),
+    prisma.intervenant.count({ where: { disponible: true } }),
+    prisma.salle.count(),
+    prisma.salle.count({ where: { disponible: true } }),
+    prisma.seance.count(),
+    prisma.seance.groupBy({ by: ['status'], _count: { status: true } }),
+    prisma.conflit.count({ where: { resolu: false } }),
+    prisma.conflit.groupBy({ by: ['type'], _count: { type: true }, where: { resolu: false } }),
+    prisma.periodeAcademique.findFirst({ where: { active: true } })
+  ]);
+
+  const workbook = XLSX.utils.book_new();
+
+  // Feuille 1 : KPIs généraux
+  const kpis = [
+    { 'Indicateur': 'Utilisateurs', 'Total': utilisateurs },
+    ...utilisateursParRole.map(r => ({ 'Indicateur': `  - ${r.role}`, 'Total': r._count.role })),
+    { 'Indicateur': 'Programmes', 'Total': programmes },
+    ...programmesParStatut.map(s => ({ 'Indicateur': `  - ${s.status}`, 'Total': s._count.status })),
+    { 'Indicateur': 'Modules', 'Total': modules },
+    ...modulesParStatut.map(s => ({ 'Indicateur': `  - ${s.status}`, 'Total': s._count.status })),
+    { 'Indicateur': 'Intervenants', 'Total': intervenants },
+    { 'Indicateur': '  - Actifs', 'Total': intervenantsActifs },
+    { 'Indicateur': '  - Inactifs', 'Total': intervenants - intervenantsActifs },
+    { 'Indicateur': 'Salles', 'Total': salles },
+    { 'Indicateur': '  - Disponibles', 'Total': sallesDisponibles },
+    { 'Indicateur': '  - Occupées', 'Total': salles - sallesDisponibles },
+    { 'Indicateur': 'Séances', 'Total': seances },
+    ...seancesParStatut.map(s => ({ 'Indicateur': `  - ${s.status}`, 'Total': s._count.status })),
+    { 'Indicateur': 'Conflits non résolus', 'Total': conflitsNonResolus },
+    ...conflitsParType.map(c => ({ 'Indicateur': `  - ${c.type}`, 'Total': c._count.type }))
+  ];
+
+  const wsKpis = XLSX.utils.json_to_sheet(kpis);
+  wsKpis['!cols'] = [{ wch: 30 }, { wch: 10 }];
+  XLSX.utils.book_append_sheet(workbook, wsKpis, 'KPIs');
+
+  // Feuille 2 : Programmes détaillés
+  const programmesList = await prisma.programme.findMany({
+    select: { name: true, status: true, progression: true, createdAt: true }
+  });
+  const wsProgrammes = XLSX.utils.json_to_sheet(programmesList.map(p => ({
+    'Nom': p.name,
+    'Statut': p.status,
+    'Progression (%)': p.progression,
+    'Créé le': new Date(p.createdAt).toLocaleDateString('fr-FR')
+  })));
+  XLSX.utils.book_append_sheet(workbook, wsProgrammes, 'Programmes');
+
+  // Feuille 3 : Période académique active
+  if (periodeActive) {
+    const wsPeriode = XLSX.utils.json_to_sheet([{
+      'Nom': periodeActive.nom,
+      'Année': periodeActive.annee,
+      'Début S1': new Date(periodeActive.debutS1).toLocaleDateString('fr-FR'),
+      'Fin S1': new Date(periodeActive.finS1).toLocaleDateString('fr-FR'),
+      'Début S2': new Date(periodeActive.debutS2).toLocaleDateString('fr-FR'),
+      'Fin S2': new Date(periodeActive.finS2).toLocaleDateString('fr-FR')
+    }]);
+    XLSX.utils.book_append_sheet(workbook, wsPeriode, 'Période Active');
+  }
+
+  // Feuille 4 : Top utilisateurs actifs (30 derniers jours)
+  const topUtilisateurs = await prisma.journalActivite.groupBy({
+    by: ['userId', 'userName'],
+    _count: { userId: true },
+    where: { createdAt: { gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) } },
+    orderBy: { _count: { userId: 'desc' } },
+    take: 10
+  });
+  const wsTop = XLSX.utils.json_to_sheet(topUtilisateurs.map(u => ({
+    'Utilisateur': u.userName || 'Inconnu',
+    'Actions (30j)': u._count.userId
+  })));
+  XLSX.utils.book_append_sheet(workbook, wsTop, 'Top Utilisateurs');
 
   return workbook;
 }
