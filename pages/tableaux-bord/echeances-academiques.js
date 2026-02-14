@@ -5,6 +5,7 @@ import Head from 'next/head';
 import Layout from '../../components/layout.js';
 import { Calendar, Clock, Plus, Edit as EditIcon, Trash2, CheckCircle2, AlertCircle } from 'lucide-react';
 import { FadeIn, SlideIn } from '../../components/ui/PageTransition.js';
+import ConfirmModal from '../../components/modals/ConfirmModal';
 import apiClient from '../../lib/api-client';
 
 export default function EchéancesAcademiques({ initialProgrammes, initialPeriodes }) {
@@ -25,6 +26,7 @@ export default function EchéancesAcademiques({ initialProgrammes, initialPeriod
   const [showFormModal, setShowFormModal] = useState(false);
   const [formType, setFormType] = useState('activite'); // 'activite' ou 'indicateur'
   const [editingItem, setEditingItem] = useState(null);
+  const [confirmModal, setConfirmModal] = useState({ isOpen: false, title: '', message: '', onConfirm: null });
 
   useEffect(() => {
     if (status === 'unauthenticated') {
@@ -106,24 +108,30 @@ export default function EchéancesAcademiques({ initialProgrammes, initialPeriod
     }
   };
 
-  const handleDelete = async (type, id) => {
-    if (!confirm('Êtes-vous sûr de vouloir supprimer cet élément ?')) return;
+  const handleDelete = (type, id) => {
+    setConfirmModal({
+      isOpen: true,
+      title: 'Confirmer la suppression',
+      message: `Êtes-vous sûr de vouloir supprimer ${type === 'activite' ? 'cette activité' : 'cet indicateur'} ?`,
+      onConfirm: async () => {
+        setConfirmModal(prev => ({ ...prev, isOpen: false }));
+        try {
+          if (session?.accessToken) {
+            apiClient.setToken(session.accessToken);
+          }
 
-    try {
-      if (session?.accessToken) {
-        apiClient.setToken(session.accessToken);
+          if (type === 'activite') {
+            await apiClient.activitesAcademiques.delete(id);
+          } else {
+            await apiClient.indicateursAcademiques.delete(id);
+          }
+
+          fetchData();
+        } catch (error) {
+          console.error('Erreur lors de la suppression:', error);
+        }
       }
-
-      if (type === 'activite') {
-        await apiClient.activitesAcademiques.delete(id);
-      } else {
-        await apiClient.indicateursAcademiques.delete(id);
-      }
-
-      fetchData();
-    } catch (error) {
-      console.error('Erreur lors de la suppression:', error);
-    }
+    });
   };
 
   const typesActivites = [
@@ -394,6 +402,18 @@ export default function EchéancesAcademiques({ initialProgrammes, initialPeriod
           </div>
         )}
       </div>
+
+      {/* Modal de confirmation de suppression */}
+      <ConfirmModal
+        isOpen={confirmModal.isOpen}
+        onClose={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
+        onConfirm={confirmModal.onConfirm}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        type="confirm"
+        confirmText="Supprimer"
+        cancelText="Annuler"
+      />
 
       {/* Modal de formulaire */}
       {showFormModal && (

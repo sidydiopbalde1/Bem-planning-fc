@@ -7,7 +7,7 @@ import Layout from '../../components/layout.js';
 import PageTransition, { AnimatedCard, SlideIn } from '../../components/ui/PageTransition.js';
 import {
   BarChart3, Download, Calendar,
-  Activity, AlertCircle, CheckCircle, FileText
+  Activity, AlertCircle, CheckCircle, FileText, Users
 } from 'lucide-react';
 import apiClient from '../../lib/api-client';
 
