@@ -5,6 +5,7 @@ import Head from 'next/head';
 import Layout from '../../components/layout.js';
 import { Award, TrendingUp, Target, Calendar, Plus, Edit as EditIcon, Trash2, CheckCircle, XCircle } from 'lucide-react';
 import { FadeIn, SlideIn } from '../../components/ui/PageTransition.js';
+import ConfirmModal from '../../components/modals/ConfirmModal';
 import apiClient from '../../lib/api-client';
 
 export default function TableauBordQualite({ initialProgrammes, initialPeriodes }) {
@@ -23,6 +24,7 @@ export default function TableauBordQualite({ initialProgrammes, initialPeriodes 
   const [loading, setLoading] = useState(false);
   const [showFormModal, setShowFormModal] = useState(false);
   const [editingIndicateur, setEditingIndicateur] = useState(null);
+  const [confirmModal, setConfirmModal] = useState({ isOpen: false, title: '', message: '', onConfirm: null });
 
   useEffect(() => {
     if (status === 'unauthenticated') {
@@ -84,19 +86,25 @@ export default function TableauBordQualite({ initialProgrammes, initialPeriodes 
     }
   };
 
-  const handleDelete = async (id) => {
-    if (!confirm('Êtes-vous sûr de vouloir supprimer cet indicateur ?')) return;
+  const handleDelete = (id) => {
+    setConfirmModal({
+      isOpen: true,
+      title: 'Confirmer la suppression',
+      message: 'Êtes-vous sûr de vouloir supprimer cet indicateur ?',
+      onConfirm: async () => {
+        setConfirmModal(prev => ({ ...prev, isOpen: false }));
+        try {
+          if (session?.accessToken) {
+            apiClient.setToken(session.accessToken);
+          }
 
-    try {
-      if (session?.accessToken) {
-        apiClient.setToken(session.accessToken);
+          await apiClient.indicateursAcademiques.delete(id);
+          fetchIndicateurs();
+        } catch (error) {
+          console.error('Erreur lors de la suppression:', error);
+        }
       }
-
-      await apiClient.indicateursAcademiques.delete(id);
-      fetchIndicateurs();
-    } catch (error) {
-      console.error('Erreur lors de la suppression:', error);
-    }
+    });
   };
 
   const getIndicateurStatus = (indicateur) => {
@@ -419,6 +427,18 @@ export default function TableauBordQualite({ initialProgrammes, initialPeriodes 
           </div>
         )}
       </div>
+
+      {/* Modal de confirmation de suppression */}
+      <ConfirmModal
+        isOpen={confirmModal.isOpen}
+        onClose={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
+        onConfirm={confirmModal.onConfirm}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        type="confirm"
+        confirmText="Supprimer"
+        cancelText="Annuler"
+      />
 
       {/* Modal de formulaire */}
       {showFormModal && (

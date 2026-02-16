@@ -2,6 +2,7 @@
 import { PrismaClient } from '@prisma/client';
 import { withCoordinator } from '../../../lib/withApiHandler';
 import RotationWeekendManager from '../../../lib/rotation-weekend';
+import { sendEmail, emailTemplates } from '../../../lib/email';
 
 const prisma = new PrismaClient();
 
@@ -174,16 +175,81 @@ async function handlePost(req, res, session) {
     }
   });
 
+  const rotationsParCoordinateur = coordinateurs.map(c => ({
+    id: c.id,
+    name: c.name,
+    nbWeekends: rotations.filter(r => r.responsableId === c.id).length
+  }));
+
+  // Récupérer les rotations avec les détails des responsables pour les emails
+  const rotationsAvecDetails = await prisma.rotationWeekend.findMany({
+    where: {
+      id: { in: rotations.map(r => r.id) }
+    },
+    include: {
+      responsable: {
+        select: { id: true, name: true, email: true }
+      }
+    },
+    orderBy: { dateDebut: 'asc' }
+  });
+
+  // Envoyer les emails aux coordinateurs concernés et à l'admin
+  try {
+    // Emails aux coordinateurs qui ont des weekends assignés
+    const coordinateursAvecWeekends = coordinateurs.filter(c =>
+      rotations.some(r => r.responsableId === c.id)
+    );
+
+    const emailPromises = coordinateursAvecWeekends.map(coordinateur => {
+      const template = emailTemplates.rotationsWeekendGenerees(
+        coordinateur,
+        rotationsParCoordinateur,
+        rotationsAvecDetails
+      );
+      return sendEmail({
+        to: coordinateur.email,
+        subject: template.subject,
+        html: template.html,
+        text: template.text
+      });
+    });
+
+    // Récupérer les admins pour les notifier aussi
+    const admins = await prisma.user.findMany({
+      where: { role: 'ADMIN' },
+      select: { id: true, name: true, email: true }
+    });
+
+    admins.forEach(admin => {
+      const template = emailTemplates.rotationsWeekendGenerees(
+        admin,
+        rotationsParCoordinateur,
+        rotationsAvecDetails
+      );
+      emailPromises.push(
+        sendEmail({
+          to: admin.email,
+          subject: template.subject,
+          html: template.html,
+          text: template.text
+        })
+      );
+    });
+
+    await Promise.allSettled(emailPromises);
+    console.log(`Emails de rotation weekend envoyés à ${coordinateursAvecWeekends.length} coordinateur(s) et ${admins.length} admin(s)`);
+  } catch (emailError) {
+    console.error('Erreur lors de l\'envoi des emails de rotation:', emailError);
+    // On ne bloque pas la réponse si les emails échouent
+  }
+
   return res.status(201).json({
     message: `${rotations.length} rotations générées avec succès`,
     rotations,
     stats: {
       total: rotations.length,
-      responsables: coordinateurs.map(c => ({
-        id: c.id,
-        name: c.name,
-        nbWeekends: rotations.filter(r => r.responsableId === c.id).length
-      }))
+      responsables: rotationsParCoordinateur
     }
   });
 }

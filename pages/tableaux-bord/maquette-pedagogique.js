@@ -95,8 +95,70 @@ export default function MaquettePedagogique({ initialProgrammes }) {
   };
 
   const handleExport = () => {
-    // Logique d'export en CSV ou Excel
-    alert('Fonctionnalité d\'export en cours de développement');
+    if (modules.length === 0) return;
+
+    const programmeName = programmes.find(p => p.id === selectedProgramme)?.name || 'Programme';
+
+    const headers = [
+      'Code', 'Module', 'CM', 'TD', 'TP', 'TPE', 'VHT',
+      'Coefficient', 'Crédits', 'Intervenant', 'Email Intervenant',
+      'Nb Étudiants', 'Progression (%)', 'Taux Réussite (%)', 'Taux Présence (%)'
+    ];
+
+    const rows = modules.map(module => {
+      const stats = calculateModuleStats(module.id);
+      return [
+        module.code,
+        module.name,
+        module.cm || 0,
+        module.td || 0,
+        module.tp || 0,
+        module.tpe || 0,
+        module.vht || 0,
+        module.coefficient || 0,
+        module.credits || 0,
+        module.intervenant ? `${module.intervenant.civilite || ''} ${module.intervenant.nom || ''}`.trim() : '',
+        module.intervenant?.email || '',
+        stats.nbEtudiants || 0,
+        stats.progression || 0,
+        stats.tauxReussite || 0,
+        stats.tauxPresence || 0
+      ];
+    });
+
+    // Totaux
+    const totaux = [
+      '', 'TOTAL',
+      modules.reduce((s, m) => s + (m.cm || 0), 0),
+      modules.reduce((s, m) => s + (m.td || 0), 0),
+      modules.reduce((s, m) => s + (m.tp || 0), 0),
+      modules.reduce((s, m) => s + (m.tpe || 0), 0),
+      modules.reduce((s, m) => s + (m.vht || 0), 0),
+      modules.reduce((s, m) => s + (m.coefficient || 0), 0),
+      modules.reduce((s, m) => s + (m.credits || 0), 0),
+      '', '', '', '', '', ''
+    ];
+
+    const escapeCsv = (val) => {
+      const str = String(val ?? '');
+      if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+        return `"${str.replace(/"/g, '""')}"`;
+      }
+      return str;
+    };
+
+    const csvContent = '\uFEFF' // BOM for Excel UTF-8
+      + [headers, ...rows, totaux]
+        .map(row => row.map(escapeCsv).join(','))
+        .join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `maquette_${programmeName.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
   };
 
   if (status === 'loading') {
@@ -443,7 +505,7 @@ function ManageModuleModal({ isOpen, onClose, module, formType, resultats, evalu
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+    <div className="fixed inset-0 bg-black/50 bg-opacity-50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-xl shadow-2xl max-w-6xl w-full max-h-[90vh] overflow-y-auto">
         <div className="p-6 border-b border-gray-200">
           <div className="flex justify-between items-center">
